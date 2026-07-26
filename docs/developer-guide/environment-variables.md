@@ -12,7 +12,7 @@
 | `NEXT_PUBLIC_POOL_CONTRACT_ID`     | Frontend + Backend | Deployed pool contract address           | `CAKE...`                                            |
 | `NEXT_PUBLIC_USDC_ISSUER`          | Frontend + Backend | USDC issuer on Stellar testnet           | `GBBD...`                                            |
 | `NEXT_PUBLIC_USDC_ASSET_CODE`      | Frontend + Backend | USDC asset code                          | `USDC`                                               |
-| `NEXT_PUBLIC_INDEXER_API_URL`      | Frontend only      | Indexer API base URL                     | `http://localhost:8080`                              |
+| `NEXT_PUBLIC_API_BASE_URL`        | Frontend only      | Indexer API base URL                     | `http://localhost:8080`                              |
 | `DATABASE_URL`                     | Backend only       | Neon pooled connection string            | `postgresql://user:pass@host/db?sslmode=require`     |
 | `DATABASE_URL_UNPOOLED`            | Backend only       | Neon direct connection string            | `postgresql://user:pass@host/db?sslmode=require`     |
 | `API_PORT`                         | Backend only       | Indexer HTTP port (fallback: `PORT`)     | `8080`                                               |
