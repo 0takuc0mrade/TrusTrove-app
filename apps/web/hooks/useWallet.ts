@@ -8,12 +8,43 @@ import { createErrorHandler } from "@/lib/errors";
 const { captureError } = createErrorHandler("useWallet");
 const REQUIRED_NETWORK = "testnet";
 
+const EXPECTED_NETWORK = "testnet";
+const WRONG_NETWORK_ERROR_CODE = "wrong_network";
+const WRONG_NETWORK_ERROR_MESSAGE =
+  "Your Freighter wallet is connected to the wrong network. Please switch Freighter to Stellar Testnet and try again.";
+
+interface FreighterNetworkDetails {
+  network?: string;
+}
+
+function hasFreighterExtension(): boolean {
+  return typeof window !== "undefined" && "freighter" in window;
+}
+
+async function validateFreighterNetwork(): Promise<void> {
+  // The connection helper already handles wallet availability. This guard also
+  // keeps mocked connections and non-browser environments from attempting to
+  // access the extension API when no Freighter provider is present.
+  if (!hasFreighterExtension()) return;
+
+  const details = (await getNetworkDetails()) as FreighterNetworkDetails;
+  const network = details.network?.trim().toLowerCase();
+
+  if (network !== EXPECTED_NETWORK) {
+    const error = new Error(WRONG_NETWORK_ERROR_MESSAGE) as Error & {
+      code: string;
+    };
+    error.code = WRONG_NETWORK_ERROR_CODE;
+    throw error;
+  }
+}
+
 /**
  * Custom hook for managing Stellar wallet connection via Freighter.
  *
  * Provides wallet state and actions to connect or disconnect a Freighter wallet.
- * Connections are only allowed when Freighter is active on the application's
- * required network, currently Stellar testnet.
+ * Connection defaults to the testnet network and verifies that Freighter is
+ * actually configured for testnet before the wallet is stored as connected.
  *
  * @returns An object containing:
  *   - `address` — The connected wallet's public key, or `null` if not connected.
@@ -45,10 +76,9 @@ export function useWallet() {
   /**
    * Initiates a Freighter wallet connection.
    *
-   * Freighter's active network is checked after access is granted and before
-   * the wallet is written to application state. This prevents balances,
-   * authentication, and transactions from being used with a wallet connected
-   * to a different Stellar network.
+   * Sets `loading` to `true` during the attempt. On success, stores the wallet
+   * address and defaults the network to `'testnet'`. The connection is rejected
+   * if Freighter reports a different active network.
    */
   const connectWallet = async () => {
     setLoading(true);
@@ -57,21 +87,19 @@ export function useWallet() {
 
     try {
       const addr = await connectFreighter();
-      const networkDetails = await getNetworkDetails();
-      const currentNetwork = networkDetails.network.trim().toLowerCase();
-
-      if (currentNetwork !== REQUIRED_NETWORK) {
-        throw new FreighterError(
-          "wrong_network",
-          `Freighter is connected to ${networkDetails.network}. Switch Freighter to Stellar Testnet and try again.`,
-        );
-      }
-
-      connect(addr, REQUIRED_NETWORK);
+      await validateFreighterNetwork();
+      connect(addr, EXPECTED_NETWORK);
     } catch (err: unknown) {
       const appError = captureError(err);
       setError(appError.message);
       if (err instanceof FreighterError) {
+        setErrorCode(err.code);
+      } else if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        typeof err.code === "string"
+      ) {
         setErrorCode(err.code);
       }
       disconnect();
