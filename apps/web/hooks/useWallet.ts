@@ -1,16 +1,19 @@
 import { useState } from "react";
+import { getNetworkDetails } from "@stellar/freighter-api";
 import { useWalletStore } from "@/store/wallet";
 import { connectFreighter, FreighterError } from "@/lib/freighter";
 import { useBalances } from "./useBalances";
 import { createErrorHandler } from "@/lib/errors";
 
 const { captureError } = createErrorHandler("useWallet");
+const REQUIRED_NETWORK = "testnet";
 
 /**
  * Custom hook for managing Stellar wallet connection via Freighter.
  *
  * Provides wallet state and actions to connect or disconnect a Freighter wallet.
- * Connection defaults to the testnet network.
+ * Connections are only allowed when Freighter is active on the application's
+ * required network, currently Stellar testnet.
  *
  * @returns An object containing:
  *   - `address` — The connected wallet's public key, or `null` if not connected.
@@ -42,17 +45,29 @@ export function useWallet() {
   /**
    * Initiates a Freighter wallet connection.
    *
-   * Sets `loading` to `true` during the attempt. On success, stores the wallet
-   * address and defaults the network to `'testnet'`. On failure, stores the error
-   * message and calls `disconnect` to ensure a clean state.
+   * Freighter's active network is checked after access is granted and before
+   * the wallet is written to application state. This prevents balances,
+   * authentication, and transactions from being used with a wallet connected
+   * to a different Stellar network.
    */
   const connectWallet = async () => {
     setLoading(true);
     setError(null);
     setErrorCode(null);
+
     try {
       const addr = await connectFreighter();
-      connect(addr, "testnet");
+      const networkDetails = await getNetworkDetails();
+      const currentNetwork = networkDetails.network.trim().toLowerCase();
+
+      if (currentNetwork !== REQUIRED_NETWORK) {
+        throw new FreighterError(
+          "wrong_network",
+          `Freighter is connected to ${networkDetails.network}. Switch Freighter to Stellar Testnet and try again.`,
+        );
+      }
+
+      connect(addr, REQUIRED_NETWORK);
     } catch (err: unknown) {
       const appError = captureError(err);
       setError(appError.message);
