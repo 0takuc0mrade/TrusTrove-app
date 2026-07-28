@@ -46,3 +46,21 @@ pnpm --filter web dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), connect Freighter on testnet, and get testnet USDC from [demo.stellar.org](https://demo.stellar.org).
+
+## Database migrations
+
+Indexer migrations are stored in `indexer/db/migrations`. Each migration has a forward file and a matching rollback file using the `NNN_name.sql` and `NNN_name.down.sql` naming convention. The initial migration is `001_initial.sql`, with rollback migration `001_initial.down.sql`.
+
+Apply the initial schema with:
+
+```bash
+psql "$DATABASE_URL" -f indexer/db/migrations/001_initial.sql
+```
+
+To roll back the initial schema, run the matching down migration:
+
+```bash
+psql "$DATABASE_URL" -f indexer/db/migrations/001_initial.down.sql
+```
+
+Run rollback migrations only when you intend to remove the objects created by the corresponding forward migration. Back up production data before rolling back a migration.
