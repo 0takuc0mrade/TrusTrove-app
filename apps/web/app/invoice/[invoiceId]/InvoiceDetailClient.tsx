@@ -280,7 +280,7 @@ export default function InvoiceDetailClient({
           </div>
         </div>
       </div>
-      <TransactionPending isOpen={showPending} txHash={pendingHash} message={pendingText} onClose={() => setShowPending(false)} />
+      <TransactionPending isOpen={showPending} txHash={pendingHash} statusText={pendingText} onClose={() => setShowPending(false)} />
     </PageLayout>
   );
 }
