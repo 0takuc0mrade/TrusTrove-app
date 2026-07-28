@@ -59,9 +59,8 @@ export function WalletConnect() {
     setNetworkSwitchError(null);
 
     try {
-      const freighter = (await import(
-        "@stellar/freighter-api"
-      )) as unknown as FreighterNetworkApi;
+      const freighter =
+        (await import("@stellar/freighter-api")) as unknown as FreighterNetworkApi;
 
       if (typeof freighter.setNetwork !== "function") {
         throw new Error(
