@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -14,7 +13,7 @@ type DbInvoice struct {
 	ID               string `json:"id"`
 	Issuer           string `json:"issuer"`
 	Buyer            string `json:"buyer"`
-	FaceValue        string `json:"face_value"`
+	FaceValue        string `json:"face_value"` // BigInt represented as string for JSON/SQL numeric safety
 	DiscountBps      int    `json:"discount_bps"`
 	FundedAmount     string `json:"funded_amount"`
 	DueDate          int64  `json:"due_date"`
@@ -47,6 +46,7 @@ type ProtocolStats struct {
 	TotalDefaulted     int    `json:"total_defaulted"`
 	AverageYieldBps    int    `json:"average_yield_bps"`
 	PoolUtilizationBps int    `json:"pool_utilization_bps"`
+	RegisteredIssuers  int    `json:"registered_issuers"`
 }
 
 func GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
@@ -58,12 +58,21 @@ func GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
 			COUNT(*) FILTER (WHERE status = 'repaid') AS total_repaid,
 			COUNT(*) FILTER (WHERE status = 'defaulted') AS total_defaulted,
 			COALESCE(AVG(discount_bps) FILTER (WHERE status IN ('funded', 'shipped', 'confirmed', 'repaid')), 0)::INTEGER AS average_yield_bps,
-			COALESCE((SELECT utilization_rate_bps FROM pool_snapshots WHERE id = 1), 0) AS pool_utilization_bps
+			COALESCE((SELECT utilization_rate_bps FROM pool_snapshots WHERE id = 1), 0) AS pool_utilization_bps,
+			COUNT(DISTINCT issuer) AS registered_issuers
 		FROM invoices
 	`
-	row := Pool.QueryRow(ctx, query)
 	var stats ProtocolStats
-	err := row.Scan(&stats.TotalUSDCFinanced, &stats.ActiveInvoiceCount, &stats.TotalInvoices, &stats.TotalRepaid, &stats.TotalDefaulted, &stats.AverageYieldBps, &stats.PoolUtilizationBps)
+	err := Pool.QueryRow(ctx, query).Scan(
+		&stats.TotalUSDCFinanced,
+		&stats.ActiveInvoiceCount,
+		&stats.TotalInvoices,
+		&stats.TotalRepaid,
+		&stats.TotalDefaulted,
+		&stats.AverageYieldBps,
+		&stats.PoolUtilizationBps,
+		&stats.RegisteredIssuers,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("queries: get protocol stats: %w", err)
 	}
@@ -78,8 +87,16 @@ func InsertInvoice(ctx context.Context, inv *DbInvoice) error {
 		) VALUES (
 			@id, @issuer, @buyer, @face_value, @discount_bps, @funded_amount, @due_date, @status, @created_at,
 			@funded_at, @shipped_at, @issuer_confirmed, @buyer_confirmed, @buyer_confirmed_at, @repaid_at
-		)`
-	args := pgx.NamedArgs{"id": inv.ID, "issuer": inv.Issuer, "buyer": inv.Buyer, "face_value": inv.FaceValue, "discount_bps": inv.DiscountBps, "funded_amount": inv.FundedAmount, "due_date": inv.DueDate, "status": inv.Status, "created_at": inv.CreatedAt, "funded_at": inv.FundedAt, "shipped_at": inv.ShippedAt, "issuer_confirmed": inv.IssuerConfirmed, "buyer_confirmed": inv.BuyerConfirmed, "buyer_confirmed_at": inv.BuyerConfirmedAt, "repaid_at": inv.RepaidAt}
+		)
+	`
+	args := pgx.NamedArgs{
+		"id": inv.ID, "issuer": inv.Issuer, "buyer": inv.Buyer, "face_value": inv.FaceValue,
+		"discount_bps": inv.DiscountBps, "funded_amount": inv.FundedAmount, "due_date": inv.DueDate,
+		"status": inv.Status, "created_at": inv.CreatedAt, "funded_at": inv.FundedAt,
+		"shipped_at": inv.ShippedAt, "issuer_confirmed": inv.IssuerConfirmed,
+		"buyer_confirmed": inv.BuyerConfirmed, "buyer_confirmed_at": inv.BuyerConfirmedAt,
+		"repaid_at": inv.RepaidAt,
+	}
 	if _, err := Pool.Exec(ctx, query, args); err != nil {
 		return fmt.Errorf("queries: insert invoice: %w", err)
 	}
@@ -87,86 +104,98 @@ func InsertInvoice(ctx context.Context, inv *DbInvoice) error {
 }
 
 func GetInvoiceByID(ctx context.Context, id string) (*DbInvoice, error) {
-	query := `SELECT id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at, funded_at, shipped_at, issuer_confirmed, buyer_confirmed, buyer_confirmed_at, repaid_at FROM invoices WHERE id = $1`
+	query := `
+		SELECT id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at,
+			funded_at, shipped_at, issuer_confirmed, buyer_confirmed, buyer_confirmed_at, repaid_at
+		FROM invoices WHERE id = $1
+	`
 	var inv DbInvoice
-	err := Pool.QueryRow(ctx, query, id).Scan(&inv.ID, &inv.Issuer, &inv.Buyer, &inv.FaceValue, &inv.DiscountBps, &inv.FundedAmount, &inv.DueDate, &inv.Status, &inv.CreatedAt, &inv.FundedAt, &inv.ShippedAt, &inv.IssuerConfirmed, &inv.BuyerConfirmed, &inv.BuyerConfirmedAt, &inv.RepaidAt)
+	err := Pool.QueryRow(ctx, query, id).Scan(
+		&inv.ID, &inv.Issuer, &inv.Buyer, &inv.FaceValue, &inv.DiscountBps, &inv.FundedAmount,
+		&inv.DueDate, &inv.Status, &inv.CreatedAt, &inv.FundedAt, &inv.ShippedAt,
+		&inv.IssuerConfirmed, &inv.BuyerConfirmed, &inv.BuyerConfirmedAt, &inv.RepaidAt,
+	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("queries: get invoice by id: %w", err)
 	}
 	return &inv, nil
 }
 
 func GetInvoicesPage(ctx context.Context, status, issuer string, limit, offset int) ([]*DbInvoice, int, error) {
-	countQuery := `SELECT COUNT(*) FROM invoices WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2)`
+	countQuery := `
+		SELECT COUNT(*) FROM invoices
+		WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2)
+	`
 	var total int
-	if err := Pool.QueryRow(ctx, countQuery, status, issuer).Scan(&total); err != nil { return nil, 0, fmt.Errorf("queries: count invoices: %w", err) }
-	query := `SELECT id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at, funded_at, shipped_at, issuer_confirmed, buyer_confirmed, buyer_confirmed_at, repaid_at FROM invoices WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
+	if err := Pool.QueryRow(ctx, countQuery, status, issuer).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("queries: count invoices: %w", err)
+	}
+
+	query := `
+		SELECT id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at,
+			funded_at, shipped_at, issuer_confirmed, buyer_confirmed, buyer_confirmed_at, repaid_at
+		FROM invoices
+		WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2)
+		ORDER BY created_at DESC LIMIT $3 OFFSET $4
+	`
 	rows, err := Pool.Query(ctx, query, status, issuer, limit, offset)
-	if err != nil { return nil, 0, fmt.Errorf("queries: get invoices: %w", err) }
+	if err != nil {
+		return nil, 0, fmt.Errorf("queries: get invoices: %w", err)
+	}
 	defer rows.Close()
-	var invoices []*DbInvoice
+
+	invoices := make([]*DbInvoice, 0)
 	for rows.Next() {
 		var inv DbInvoice
-		if err := rows.Scan(&inv.ID, &inv.Issuer, &inv.Buyer, &inv.FaceValue, &inv.DiscountBps, &inv.FundedAmount, &inv.DueDate, &inv.Status, &inv.CreatedAt, &inv.FundedAt, &inv.ShippedAt, &inv.IssuerConfirmed, &inv.BuyerConfirmed, &inv.BuyerConfirmedAt, &inv.RepaidAt); err != nil { return nil, 0, fmt.Errorf("queries: scan invoice: %w", err) }
+		if err := rows.Scan(
+			&inv.ID, &inv.Issuer, &inv.Buyer, &inv.FaceValue, &inv.DiscountBps, &inv.FundedAmount,
+			&inv.DueDate, &inv.Status, &inv.CreatedAt, &inv.FundedAt, &inv.ShippedAt,
+			&inv.IssuerConfirmed, &inv.BuyerConfirmed, &inv.BuyerConfirmedAt, &inv.RepaidAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("queries: scan invoice: %w", err)
+		}
 		invoices = append(invoices, &inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("queries: iterate invoices: %w", err)
 	}
 	return invoices, total, nil
 }
 
-func UpdateInvoiceListed(ctx context.Context, id string, status string, discountBps int) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1, discount_bps = $2 WHERE id = $3`, status, discountBps, id); if err != nil { return fmt.Errorf("queries: update invoice listed: %w", err) }; return nil }
-func UpdateInvoiceFunded(ctx context.Context, id string, status string, fundedAmount string, fundedAt int64) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1, funded_amount = $2, funded_at = $3 WHERE id = $4`, status, fundedAmount, fundedAt, id); if err != nil { return fmt.Errorf("queries: update invoice funded: %w", err) }; return nil }
-func UpdateInvoiceShipped(ctx context.Context, id string, status string, shippedAt int64) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1, shipped_at = $2, issuer_confirmed = TRUE WHERE id = $3`, status, shippedAt, id); if err != nil { return fmt.Errorf("queries: update invoice shipped: %w", err) }; return nil }
-func UpdateInvoiceDeliveryConfirmed(ctx context.Context, id string, status string, buyerConfirmedAt int64) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1, buyer_confirmed = TRUE, buyer_confirmed_at = $2 WHERE id = $3`, status, buyerConfirmedAt, id); if err != nil { return fmt.Errorf("queries: update invoice delivery confirmed: %w", err) }; return nil }
-func UpdateInvoiceRepaid(ctx context.Context, id string, status string, repaidAt int64) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1, repaid_at = $2 WHERE id = $3`, status, repaidAt, id); if err != nil { return fmt.Errorf("queries: update invoice repaid: %w", err) }; return nil }
-func UpdateInvoiceStatus(ctx context.Context, id string, status string) error { _, err := Pool.Exec(ctx, `UPDATE invoices SET status = $1 WHERE id = $2`, status, id); if err != nil { return fmt.Errorf("queries: update invoice status: %w", err) }; return nil }
-
-func GetPoolStats(ctx context.Context) (*DbPoolStats, error) {
-	var stats DbPoolStats
-	err := Pool.QueryRow(ctx, `SELECT total_deposits, total_funded, available_liquidity, utilization_rate_bps, total_yield_distributed, active_invoice_count, total_shares, updated_at FROM pool_snapshots WHERE id = 1`).Scan(&stats.TotalDeposits, &stats.TotalFunded, &stats.AvailableLiquidity, &stats.UtilizationRateBps, &stats.TotalYieldDistributed, &stats.ActiveInvoiceCount, &stats.TotalShares, &stats.UpdatedAt)
-	if err != nil { if errors.Is(err, pgx.ErrNoRows) { return nil, nil }; return nil, fmt.Errorf("queries: get pool stats: %w", err) }
-	return &stats, nil
-}
-
-func UpdatePoolStats(ctx context.Context, stats *DbPoolStats) error {
-	args := pgx.NamedArgs{"total_deposits": stats.TotalDeposits, "total_funded": stats.TotalFunded, "available_liquidity": stats.AvailableLiquidity, "utilization_rate_bps": stats.UtilizationRateBps, "total_yield_distributed": stats.TotalYieldDistributed, "active_invoice_count": stats.ActiveInvoiceCount, "total_shares": stats.TotalShares}
-	if _, err := Pool.Exec(ctx, `UPDATE pool_snapshots SET total_deposits = @total_deposits, total_funded = @total_funded, available_liquidity = @available_liquidity, utilization_rate_bps = @utilization_rate_bps, total_yield_distributed = @total_yield_distributed, active_invoice_count = @active_invoice_count, total_shares = @total_shares, updated_at = CURRENT_TIMESTAMP WHERE id = 1`, args); err != nil { return fmt.Errorf("queries: update pool stats: %w", err) }
-	return nil
-}
-
-func LogEvent(ctx context.Context, eventID, contractID string, ledger int32, ledgerClosedAt int64, eventType string, data interface{}) error {
-	dataBytes, err := json.Marshal(data)
-	if err != nil { return fmt.Errorf("queries: log event: marshal data: %w", err) }
-	if _, err = Pool.Exec(ctx, `INSERT INTO events_log (event_id, contract_id, ledger, ledger_closed_at, event_type, data) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (event_id) DO NOTHING`, eventID, contractID, ledger, ledgerClosedAt, eventType, dataBytes); err != nil { return fmt.Errorf("queries: log event: %w", err) }
-	return nil
-}
-
+// AreEventsProcessed returns the event IDs from ids that have already been
+// recorded. It deliberately performs one query for the whole polling batch.
 func AreEventsProcessed(ctx context.Context, ids []string) (map[string]bool, error) {
 	processed := make(map[string]bool, len(ids))
-	if len(ids) == 0 { return processed, nil }
-	rows, err := Pool.Query(ctx, `SELECT event_id FROM events_log WHERE event_id = ANY($1)`, ids)
-	if err != nil { return nil, fmt.Errorf("queries: are events processed: %w", err) }
-	defer rows.Close()
-	for rows.Next() {
-		var eventID string
-		if err := rows.Scan(&eventID); err != nil { return nil, fmt.Errorf("queries: scan processed event: %w", err) }
-		processed[eventID] = true
+	if len(ids) == 0 {
+		return processed, nil
 	}
-	if err := rows.Err(); err != nil { return nil, fmt.Errorf("queries: iterate processed events: %w", err) }
+
+	rows, err := Pool.Query(ctx, `SELECT event_id FROM events_log WHERE event_id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("queries: check processed events: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("queries: scan processed event: %w", err)
+		}
+		processed[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("queries: iterate processed events: %w", err)
+	}
 	return processed, nil
 }
 
-type EventLog struct { ID int `json:"id"`; EventID string `json:"event_id"`; ContractID string `json:"contract_id"`; Ledger int32 `json:"ledger"`; LedgerClosedAt int64 `json:"ledger_closed_at"`; EventType string `json:"event_type"`; Data json.RawMessage `json:"data"` }
-
-func GetRecentEvents(ctx context.Context, limit int) ([]*EventLog, error) {
-	rows, err := Pool.Query(ctx, `SELECT id, event_id, contract_id, ledger, ledger_closed_at, event_type, data FROM events_log ORDER BY ledger_closed_at DESC LIMIT $1`, limit)
-	if err != nil { return nil, fmt.Errorf("queries: get recent events: %w", err) }
-	defer rows.Close()
-	var events []*EventLog
-	for rows.Next() { var ev EventLog; if err := rows.Scan(&ev.ID, &ev.EventID, &ev.ContractID, &ev.Ledger, &ev.LedgerClosedAt, &ev.EventType, &ev.Data); err != nil { return nil, fmt.Errorf("queries: scan event: %w", err) }; events = append(events, &ev) }
-	return events, nil
+func IsEventProcessed(ctx context.Context, id string) (bool, error) {
+	processed, err := AreEventsProcessed(ctx, []string{id})
+	if err != nil {
+		return false, err
+	}
+	return processed[id], nil
 }
-
-func GetLatestProcessedLedger(ctx context.Context) (int32, error) { var ledger int32; if err := Pool.QueryRow(ctx, `SELECT COALESCE(MAX(ledger), 0) FROM events_log`).Scan(&ledger); err != nil { return 0, fmt.Errorf("queries: get latest processed ledger: %w", err) }; return ledger, nil }
-func GetCheckpoint(ctx context.Context) (int32, error) { var ledger int32; err := Pool.QueryRow(ctx, `SELECT value FROM indexer_checkpoint WHERE key = 'latest_processed_ledger'`).Scan(&ledger); if err != nil { if errors.Is(err, pgx.ErrNoRows) { return 0, nil }; return 0, fmt.Errorf("queries: get checkpoint: %w", err) }; return ledger, nil }
-func UpsertCheckpoint(ctx context.Context, ledger int32) error { if _, err := Pool.Exec(ctx, `INSERT INTO indexer_checkpoint (key, value) VALUES ('latest_processed_ledger', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, ledger); err != nil { return fmt.Errorf("queries: upsert checkpoint: %w", err) }; return nil }
