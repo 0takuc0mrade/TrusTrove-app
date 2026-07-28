@@ -23,7 +23,7 @@
 
 ## Source of truth
 
-- **Local dev (backend):** Root `.env` + `.env.local` (loaded by godotenv, `.env.local` secrets take precedence)
+- **Local dev (backend):** Root `.env.local` (loaded by godotenv)
 - **Local dev (frontend):** `apps/web/.env.local` (loaded by Next.js)
 - **Production (backend):** Render dashboard → Environment Variables
 - **Production (frontend):** Vercel dashboard → Environment Variables
