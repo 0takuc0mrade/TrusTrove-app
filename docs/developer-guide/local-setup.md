@@ -32,14 +32,33 @@ The contract IDs are pre-filled with the deployed testnet addresses. No changes 
 docker-compose up -d
 ```
 
-### 4. Start the indexer
+### 4. Run indexer database migrations
+
+Migrations are stored in `indexer/db/migrations`. Forward migrations use the existing `NNN_name.sql` convention, and each forward migration has a matching `NNN_name.down.sql` rollback script.
+
+Apply the initial schema with:
+
+```bash
+cd indexer
+psql "$DATABASE_URL" -f db/migrations/001_initial.sql
+```
+
+To roll back the initial schema, run the matching down migration. This is destructive and removes the tables created by the initial migration:
+
+```bash
+psql "$DATABASE_URL" -f db/migrations/001_initial.down.sql
+```
+
+Always review a down migration before running it against a shared or production database.
+
+### 5. Start the indexer
 
 ```bash
 cd indexer
 go run main.go
 ```
 
-### 5. Start the frontend
+### 6. Start the frontend
 
 ```bash
 pnpm --filter web dev
