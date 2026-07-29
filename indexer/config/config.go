@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -37,10 +39,15 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 	// Try loading from parent directories or current directory
-	_ = godotenv.Load("../.env.local")
-	_ = godotenv.Load("../.env")
-	_ = godotenv.Load(".env.local")
-	_ = godotenv.Load(".env")
+	envPaths := []string{"../.env.local", "../.env", ".env.local", ".env"}
+	for _, path := range envPaths {
+		err := godotenv.Load(path)
+		if err == nil {
+			log.Printf("INFO: loaded env file: %s", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("WARN: failed to load env file %s: %v", path, err)
+		}
+	}
 
 	missing := make([]string, 0)
 	getRequired := func(name string) string {
