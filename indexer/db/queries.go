@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -90,14 +91,24 @@ func InsertInvoice(ctx context.Context, inv *DbInvoice) error {
 		)
 	`
 	args := pgx.NamedArgs{
-		"id": inv.ID, "issuer": inv.Issuer, "buyer": inv.Buyer, "face_value": inv.FaceValue,
-		"discount_bps": inv.DiscountBps, "funded_amount": inv.FundedAmount, "due_date": inv.DueDate,
-		"status": inv.Status, "created_at": inv.CreatedAt, "funded_at": inv.FundedAt,
-		"shipped_at": inv.ShippedAt, "issuer_confirmed": inv.IssuerConfirmed,
-		"buyer_confirmed": inv.BuyerConfirmed, "buyer_confirmed_at": inv.BuyerConfirmedAt,
-		"repaid_at": inv.RepaidAt,
+		"id":                 inv.ID,
+		"issuer":             inv.Issuer,
+		"buyer":              inv.Buyer,
+		"face_value":        inv.FaceValue,
+		"discount_bps":      inv.DiscountBps,
+		"funded_amount":     inv.FundedAmount,
+		"due_date":           inv.DueDate,
+		"status":             inv.Status,
+		"created_at":         inv.CreatedAt,
+		"funded_at":          inv.FundedAt,
+		"shipped_at":         inv.ShippedAt,
+		"issuer_confirmed":   inv.IssuerConfirmed,
+		"buyer_confirmed":    inv.BuyerConfirmed,
+		"buyer_confirmed_at": inv.BuyerConfirmedAt,
+		"repaid_at":          inv.RepaidAt,
 	}
-	if _, err := Pool.Exec(ctx, query, args); err != nil {
+	_, err := Pool.Exec(ctx, query, args)
+	if err != nil {
 		return fmt.Errorf("queries: insert invoice: %w", err)
 	}
 	return nil
@@ -125,23 +136,42 @@ func GetInvoiceByID(ctx context.Context, id string) (*DbInvoice, error) {
 }
 
 func GetInvoicesPage(ctx context.Context, status, issuer string, limit, offset int) ([]*DbInvoice, int, error) {
-	countQuery := `
-		SELECT COUNT(*) FROM invoices
-		WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2)
-	`
+	predicates := make([]string, 0, 2)
+	filterArgs := make([]any, 0, 2)
+
+	if status != "" {
+		predicates = append(predicates, fmt.Sprintf("status = $%d", len(filterArgs)+1))
+		filterArgs = append(filterArgs, status)
+	}
+	if issuer != "" {
+		predicates = append(predicates, fmt.Sprintf("issuer = $%d", len(filterArgs)+1))
+		filterArgs = append(filterArgs, issuer)
+	}
+
+	whereClause := ""
+	if len(predicates) > 0 {
+		whereClause = " WHERE " + strings.Join(predicates, " AND ")
+	}
+
+	countQuery := "SELECT COUNT(*) FROM invoices" + whereClause
 	var total int
-	if err := Pool.QueryRow(ctx, countQuery, status, issuer).Scan(&total); err != nil {
+	if err := Pool.QueryRow(ctx, countQuery, filterArgs...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("queries: count invoices: %w", err)
 	}
 
-	query := `
-		SELECT id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at,
+	limitPlaceholder := len(filterArgs) + 1
+	offsetPlaceholder := len(filterArgs) + 2
+	query := fmt.Sprintf(`
+		SELECT 
+			id, issuer, buyer, face_value, discount_bps, funded_amount, due_date, status, created_at,
 			funded_at, shipped_at, issuer_confirmed, buyer_confirmed, buyer_confirmed_at, repaid_at
-		FROM invoices
-		WHERE ($1 = '' OR status = $1) AND ($2 = '' OR issuer = $2)
-		ORDER BY created_at DESC LIMIT $3 OFFSET $4
-	`
-	rows, err := Pool.Query(ctx, query, status, issuer, limit, offset)
+		FROM invoices%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, limitPlaceholder, offsetPlaceholder)
+	queryArgs := append(append([]any{}, filterArgs...), limit, offset)
+
+	rows, err := Pool.Query(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("queries: get invoices: %w", err)
 	}
@@ -159,8 +189,152 @@ func GetInvoicesPage(ctx context.Context, status, issuer string, limit, offset i
 		}
 		invoices = append(invoices, &inv)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("queries: iterate invoices: %w", err)
+	return invoices, total, nil
+}
+
+func UpdateInvoiceListed(ctx context.Context, id string, status string, discountBps int) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1, discount_bps = $2
+		WHERE id = $3
+	`
+	_, err := Pool.Exec(ctx, query, status, discountBps, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice listed: %w", err)
+	}
+	return nil
+}
+
+func UpdateInvoiceFunded(ctx context.Context, id string, status string, fundedAmount string, fundedAt int64) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1, funded_amount = $2, funded_at = $3
+		WHERE id = $4
+	`
+	_, err := Pool.Exec(ctx, query, status, fundedAmount, fundedAt, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice funded: %w", err)
+	}
+	return nil
+}
+
+func UpdateInvoiceShipped(ctx context.Context, id string, status string, shippedAt int64) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1, shipped_at = $2, issuer_confirmed = TRUE
+		WHERE id = $3
+	`
+	_, err := Pool.Exec(ctx, query, status, shippedAt, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice shipped: %w", err)
+	}
+	return nil
+}
+
+func UpdateInvoiceDeliveryConfirmed(ctx context.Context, id string, status string, buyerConfirmedAt int64) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1, buyer_confirmed = TRUE, buyer_confirmed_at = $2
+		WHERE id = $3
+	`
+	_, err := Pool.Exec(ctx, query, status, buyerConfirmedAt, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice delivery confirmed: %w", err)
+	}
+	return nil
+}
+
+func UpdateInvoiceRepaid(ctx context.Context, id string, status string, repaidAt int64) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1, repaid_at = $2
+		WHERE id = $3
+	`
+	_, err := Pool.Exec(ctx, query, status, repaidAt, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice repaid: %w", err)
+	}
+	return nil
+}
+
+func UpdateInvoiceStatus(ctx context.Context, id string, status string) error {
+	query := `
+		UPDATE invoices 
+		SET status = $1
+		WHERE id = $2
+	`
+	_, err := Pool.Exec(ctx, query, status, id)
+	if err != nil {
+		return fmt.Errorf("queries: update invoice status: %w", err)
+	}
+	return nil
+}
+
+func GetPoolStats(ctx context.Context) (*DbPoolStats, error) {
+	query := `
+		SELECT total_deposits, total_funded, available_liquidity, utilization_rate_bps, total_yield_distributed, active_invoice_count, total_shares, updated_at
+		FROM pool_snapshots
+		WHERE id = 1
+	`
+	row := Pool.QueryRow(ctx, query)
+	var stats DbPoolStats
+	err := row.Scan(
+		&stats.TotalDeposits, &stats.TotalFunded, &stats.AvailableLiquidity,
+		&stats.UtilizationRateBps, &stats.TotalYieldDistributed, &stats.ActiveInvoiceCount,
+		&stats.TotalShares, &stats.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("queries: get pool stats: %w", err)
+	}
+	return &stats, nil
+}
+
+func UpdatePoolStats(ctx context.Context, stats *DbPoolStats) error {
+	query := `
+		UPDATE pool_snapshots
+		SET total_deposits = @total_deposits,
+		    total_funded = @total_funded,
+		    available_liquidity = @available_liquidity,
+		    utilization_rate_bps = @utilization_rate_bps,
+		    total_yield_distributed = @total_yield_distributed,
+		    active_invoice_count = @active_invoice_count,
+		    total_shares = @total_shares,
+		updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`
+	args := pgx.NamedArgs{
+		"total_deposits":          stats.TotalDeposits,
+		"total_funded":            stats.TotalFunded,
+		"available_liquidity":     stats.AvailableLiquidity,
+		"utilization_rate_bps":    stats.UtilizationRateBps,
+		"total_yield_distributed": stats.TotalYieldDistributed,
+		"active_invoice_count":    stats.ActiveInvoiceCount,
+		"total_shares":            stats.TotalShares,
+	}
+	_, err := Pool.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("queries: update pool stats: %w", err)
+	}
+	return nil
+}
+
+func LogEvent(ctx context.Context, eventID, contractID string, ledger int32, ledgerClosedAt int64, eventType string, data interface{}) error {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("queries: log event: marshal data: %w", err)
+	}
+
+	query := `
+		INSERT INTO events_log (event_id, contract_id, ledger, ledger_closed_at, event_type, data)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (event_id) DO NOTHING
+	`
+	_, err = Pool.Exec(ctx, query, eventID, contractID, ledger, ledgerClosedAt, eventType, dataBytes)
+	if err != nil {
+		return fmt.Errorf("queries: log event: %w", err)
 	}
 	return invoices, total, nil
 }

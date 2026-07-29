@@ -9,6 +9,8 @@ import (
 	"trusttrove/indexer/api"
 	"trusttrove/indexer/config"
 	"trusttrove/indexer/db"
+
+	"github.com/stellar/go-stellar-sdk/keypair"
 )
 
 // SorobanEvent represents a normalized event emitted by a Soroban contract
@@ -87,6 +89,15 @@ func (l *EventListener) Start(ctx context.Context) error {
 		l.health.MarkStarted()
 	}
 
+	if l.cfg.ServerSeed == "" {
+		return fmt.Errorf("ServerSeed is required when event listener is enabled")
+	}
+	if _, err := keypair.ParseFull(l.cfg.ServerSeed); err != nil {
+		return fmt.Errorf("invalid ServerSeed configuration: %w", err)
+	}
+
+	// 1. Determine start ledger sequence
+	// Prefer checkpoint for accurate resume across empty-ledger ranges
 	currentLedger, err := db.GetCheckpoint(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get checkpoint: %w", err)
