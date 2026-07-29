@@ -55,7 +55,7 @@ export function usePool() {
         await ensureAllowance(poolContractID, amount);
       }
 
-      return poolClient.deposit(address, amount, asset, address);
+      return poolClient.deposit(address, amount, address);
     },
     onSuccess: (txHash: string) => {
       queryClient.invalidateQueries({ queryKey: ["poolStats"] });

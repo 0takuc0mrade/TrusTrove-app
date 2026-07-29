@@ -440,7 +440,7 @@ export default function InvoiceDetailClient({
                     disabled={submitting}
                     onClick={() =>
                       handleAction(
-                        () => shipInvoice(invoice.id),
+                        () => shipInvoice({ invoiceId: invoice.id }),
                         "Marking goods as shipped...",
                         "Unable to mark goods as shipped.",
                       )
@@ -455,7 +455,7 @@ export default function InvoiceDetailClient({
                     disabled={submitting}
                     onClick={() =>
                       handleAction(
-                        () => confirmDelivery(invoice.id),
+                        () => confirmDelivery({ invoiceId: invoice.id }),
                         "Confirming delivery...",
                         "Unable to confirm delivery.",
                       )
@@ -470,7 +470,7 @@ export default function InvoiceDetailClient({
                     disabled={submitting}
                     onClick={() =>
                       handleAction(
-                        () => repayInvoice(invoice.id),
+                        () => repayInvoice({ invoiceId: invoice.id }),
                         "Repaying invoice...",
                         "Unable to repay invoice.",
                       )
@@ -485,7 +485,7 @@ export default function InvoiceDetailClient({
                     disabled={submitting}
                     onClick={() =>
                       handleAction(
-                        () => defaultInvoice(invoice.id),
+                        () => defaultInvoice({ invoiceId: invoice.id }),
                         "Defaulting invoice...",
                         "Unable to default invoice.",
                       )
@@ -507,7 +507,7 @@ export default function InvoiceDetailClient({
       <TransactionPending
         isOpen={showPending}
         txHash={pendingHash}
-        message={pendingText}
+        statusText={pendingText}
         onClose={() => setShowPending(false)}
       />
     </PageLayout>
