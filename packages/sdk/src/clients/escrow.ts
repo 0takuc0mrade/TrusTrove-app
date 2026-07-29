@@ -1,25 +1,30 @@
-import { nativeToScVal, scValToNative, xdr } from '@stellar/stellar-sdk';
-import { BaseContractClient } from '../base.js';
+import {
+  Address,
+  nativeToScVal,
+  scValToNative,
+  xdr,
+} from "@stellar/stellar-sdk";
+import { BaseContractClient } from "../base.js";
 
 export class EscrowClient extends BaseContractClient {
-  /**
-   * Locks funds for an invoice in the escrow contract.
-   * @param invoiceIdHex - The hexadecimal ID of the invoice to lock funds for
-   * @param amount - Amount of USDC to lock (in stroops)
-   * @param signerPublicKey - The public key that must sign the transaction
-   * @returns True if locking succeeded
-   * @throws Error if simulation fails or transaction submission fails
-   */
+  async initialize(
+    adminAddress: string,
+    signerPublicKey: string,
+  ): Promise<string> {
+    const args = [new Address(adminAddress).toScVal()];
+    return this.writeContract("initialize", args, signerPublicKey);
+  }
+
   async lock(
     invoiceIdHex: string,
     amount: bigint,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<boolean> {
     const args = [
-      xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex')),
-      nativeToScVal(amount, { type: 'u128' }),
+      xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, "hex")),
+      nativeToScVal(amount, { type: "u128" }),
     ];
-    return this.writeContract('lock', args, signerPublicKey).then(() => true);
+    return this.writeContract("lock", args, signerPublicKey).then(() => true);
   }
 
   /**
@@ -31,10 +36,12 @@ export class EscrowClient extends BaseContractClient {
    */
   async releaseToIssuer(
     invoiceIdHex: string,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<boolean> {
-    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
-    return this.writeContract('release_to_issuer', args, signerPublicKey).then(() => true);
+    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, "hex"))];
+    return this.writeContract("release_to_issuer", args, signerPublicKey).then(
+      () => true,
+    );
   }
 
   /**
@@ -48,13 +55,15 @@ export class EscrowClient extends BaseContractClient {
   async releaseToPool(
     invoiceIdHex: string,
     repaymentAmount: bigint,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<boolean> {
     const args = [
-      xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex')),
-      nativeToScVal(repaymentAmount, { type: 'u128' }),
+      xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, "hex")),
+      nativeToScVal(repaymentAmount, { type: "u128" }),
     ];
-    return this.writeContract('release_to_pool', args, signerPublicKey).then(() => true);
+    return this.writeContract("release_to_pool", args, signerPublicKey).then(
+      () => true,
+    );
   }
 
   /**
@@ -66,10 +75,12 @@ export class EscrowClient extends BaseContractClient {
    */
   async handleDefault(
     invoiceIdHex: string,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<boolean> {
-    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
-    return this.writeContract('handle_default', args, signerPublicKey).then(() => true);
+    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, "hex"))];
+    return this.writeContract("handle_default", args, signerPublicKey).then(
+      () => true,
+    );
   }
 
   /**
@@ -81,14 +92,13 @@ export class EscrowClient extends BaseContractClient {
    */
   async getLocked(
     invoiceIdHex: string,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<bigint> {
-    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
-    return this.readContract(
-      'get_locked',
-      args,
-      signerPublicKey,
-      (val) => typeof scValToNative(val) === 'bigint' ? scValToNative(val) as bigint : BigInt(String(scValToNative(val) || 0))
+    const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, "hex"))];
+    return this.readContract("get_locked", args, signerPublicKey, (val) =>
+      typeof scValToNative(val) === "bigint"
+        ? (scValToNative(val) as bigint)
+        : BigInt(String(scValToNative(val) || 0)),
     );
   }
 }
