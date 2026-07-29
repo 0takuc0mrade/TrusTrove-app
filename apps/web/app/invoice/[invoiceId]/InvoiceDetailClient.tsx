@@ -270,17 +270,17 @@ export default function InvoiceDetailClient({
             {(canShip || canConfirm || canRepay || canDefault) && (
               <div className="bg-[#0d131a] border border-border rounded-lg p-5 space-y-3">
                 <h3 className="text-xs font-bold font-mono text-white uppercase tracking-wider flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-primary" />Available Action</h3>
-                {canShip && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => shipInvoice(invoice.id), "Marking goods as shipped...", "Unable to mark goods as shipped.")}>MARK GOODS SHIPPED</Button>}
-                {canConfirm && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => confirmDelivery(invoice.id), "Confirming delivery...", "Unable to confirm delivery.")}>CONFIRM DELIVERY</Button>}
-                {canRepay && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => repayInvoice(invoice.id), "Repaying invoice...", "Unable to repay invoice.")}>REPAY INVOICE</Button>}
-                {canDefault && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => defaultInvoice(invoice.id), "Defaulting invoice...", "Unable to default invoice.")}>DEFAULT INVOICE</Button>}
+                {canShip && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => shipInvoice({ invoiceId: invoice.id }), "Marking goods as shipped...", "Unable to mark goods as shipped.")}>MARK GOODS SHIPPED</Button>}
+                {canConfirm && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => confirmDelivery({ invoiceId: invoice.id }), "Confirming delivery...", "Unable to confirm delivery.")}>CONFIRM DELIVERY</Button>}
+                {canRepay && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => repayInvoice({ invoiceId: invoice.id }), "Repaying invoice...", "Unable to repay invoice.")}>REPAY INVOICE</Button>}
+                {canDefault && <Button className="w-full" disabled={submitting} onClick={() => handleAction(() => defaultInvoice({ invoiceId: invoice.id }), "Defaulting invoice...", "Unable to default invoice.")}>DEFAULT INVOICE</Button>}
                 {error && <p className="text-xs font-mono text-red-400" role="alert">{error}</p>}
               </div>
             )}
           </div>
         </div>
       </div>
-      <TransactionPending isOpen={showPending} txHash={pendingHash} message={pendingText} onClose={() => setShowPending(false)} />
+      <TransactionPending isOpen={showPending} txHash={pendingHash} statusText={pendingText} onClose={() => setShowPending(false)} />
     </PageLayout>
   );
 }

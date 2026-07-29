@@ -78,7 +78,7 @@ export default function LPDashboard() {
     const amount = Number(depositAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    await deposit({ amount: BigInt(Math.floor(amount * 10_000_000)) });
+    await deposit({ amount: BigInt(Math.floor(amount * 10_000_000)), asset: "USDC" });
     setDepositAmount("");
   };
 
