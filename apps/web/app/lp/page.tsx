@@ -98,7 +98,10 @@ export default function LPDashboard() {
     const amount = Number(depositAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    await deposit({ amount: BigInt(Math.floor(amount * 10_000_000)) });
+    await deposit({
+      amount: BigInt(Math.floor(amount * 10_000_000)),
+      asset: "USDC",
+    });
     setDepositAmount("");
   };
 
@@ -114,8 +117,14 @@ export default function LPDashboard() {
           </p>
         </div>
 
-        <form onSubmit={handleDeposit} className="space-y-4 rounded-lg border border-border bg-card p-6">
-          <label htmlFor="deposit-amount" className="block text-sm text-slate-300">
+        <form
+          onSubmit={handleDeposit}
+          className="space-y-4 rounded-lg border border-border bg-card p-6"
+        >
+          <label
+            htmlFor="deposit-amount"
+            className="block text-sm text-slate-300"
+          >
             Deposit amount
           </label>
           <input
