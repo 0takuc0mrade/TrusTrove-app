@@ -35,7 +35,7 @@ TrusTrove is a decentralized trade finance platform built on the Stellar network
 
 ### Frontend
 
-- **Location**: [`apps/web`](file:///c:/Users/ICT%20LASIEC/TrusTrove-app/apps/web)
+- **Location**: [`apps/web`](../apps/web)
 - **Role**: High-fidelity web application for interacting with the platform.
 - **Current Responsibilities**:
   - Connects to Stellar wallets (e.g., Freighter) for transaction signing.
@@ -45,7 +45,7 @@ TrusTrove is a decentralized trade finance platform built on the Stellar network
 
 ### Go Indexer
 
-- **Location**: [`indexer`](file:///c:/Users/ICT%20LASIEC/TrusTrove-app/indexer)
+- **Location**: [`indexer`](../indexer)
 - **Role**: A Go web server serving two main purposes: API Routing and Blockchain Event Listening.
 - **Current Responsibilities**:
   - **API Service**: Implements SEP-10 authentication (requesting challenge tx and exchanging signed tx for JWT) and exposes REST endpoints for protocol-level stats, invoices, events, and pool data.
