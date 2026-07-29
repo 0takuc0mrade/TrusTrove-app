@@ -29,6 +29,14 @@ export class PoolClient extends BaseContractClient {
     return this.writeContract("deposit", args, signerPublicKey);
   }
 
+  /**
+   * Withdraws liquidity shares from the pool.
+   * @param lp - The public key of the liquidity provider
+   * @param shares - Number of shares to withdraw
+   * @param signerPublicKey - The public key that must sign the transaction
+   * @returns The transaction hash
+   * @throws Error if simulation fails or transaction submission fails
+   */
   async withdraw(
     lp: string,
     shares: bigint,
@@ -41,6 +49,13 @@ export class PoolClient extends BaseContractClient {
     return this.writeContract("withdraw", args, signerPublicKey);
   }
 
+  /**
+   * Funds an invoice from the pool liquidity.
+   * @param invoiceIdHex - The hexadecimal ID of the invoice to fund
+   * @param signerPublicKey - The public key that must sign the transaction
+   * @returns True if funding succeeded
+   * @throws Error if simulation fails or transaction submission fails
+   */
   async fundInvoice(
     invoiceIdHex: string,
     signerPublicKey: string,
@@ -51,6 +66,14 @@ export class PoolClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Records repayment received for a funded invoice.
+   * @param invoiceIdHex - The hexadecimal ID of the invoice
+   * @param amount - The repayment amount received (in stroops)
+   * @param signerPublicKey - The public key that must sign the transaction
+   * @returns True if repayment was recorded successfully
+   * @throws Error if simulation fails or transaction submission fails
+   */
   async receiveRepayment(
     invoiceIdHex: string,
     amount: bigint,
@@ -65,6 +88,12 @@ export class PoolClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Retrieves pool statistics (read-only, no on-chain auth required).
+   * @param signerPublicKey - The public key for RPC account lookup
+   * @returns Pool statistics including TVL, utilization, and APY
+   * @throws Error if simulation fails
+   */
   async getStats(signerPublicKey: string): Promise<PoolStats> {
     const args: xdr.ScVal[] = [];
     return this.readContract("get_stats", args, signerPublicKey, (val) =>
@@ -82,6 +111,12 @@ export class PoolClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Gets the current pool utilization rate (read-only).
+   * @param signerPublicKey - The public key for RPC account lookup
+   * @returns Utilization rate as a decimal (0-1)
+   * @throws Error if simulation fails
+   */
   async getUtilizationRate(signerPublicKey: string): Promise<number> {
     const args: xdr.ScVal[] = [];
     return this.readContract(
