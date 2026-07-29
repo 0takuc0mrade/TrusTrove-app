@@ -111,7 +111,7 @@ describe("usePool", () => {
   });
 
   it("returns position when wallet is connected", () => {
-    vi.mocked(useQuery).mockImplementation(function (args: any) {
+    vi.mocked(useQuery).mockImplementation(function (args: any): any {
       const qk = args.queryKey;
       if (qk[0] === "poolStats") {
         return { data: null, isLoading: false, error: null, refetch: vi.fn() };
@@ -142,7 +142,7 @@ describe("usePool", () => {
       isLoading: false,
       error: null,
       refetch: vi.fn(),
-    });
+    } as any);
 
     renderHook(() => usePool());
     const calls = vi.mocked(useQuery).mock.calls;
@@ -165,7 +165,7 @@ describe("usePool", () => {
     const { result } = renderHook(() => usePool());
 
     await act(async () => {
-      await result.current.deposit({ amount: 100n });
+      await result.current.deposit({ amount: 100n, asset: "USDC" });
     });
 
     expect(mockDeposit).toHaveBeenCalledWith("G123", 100n, "G123");
@@ -186,7 +186,7 @@ describe("usePool", () => {
 
     await expect(
       act(async () => {
-        await result.current.deposit({ amount: 100n });
+        await result.current.deposit({ amount: 100n, asset: "USDC" });
       }),
     ).rejects.toThrow("Wallet not connected");
 
@@ -206,7 +206,7 @@ describe("usePool", () => {
 
     await expect(
       act(async () => {
-        await result.current.deposit({ amount: 100n });
+        await result.current.deposit({ amount: 100n, asset: "USDC" });
       }),
     ).rejects.toThrow("Pool full");
 

@@ -16,29 +16,13 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-type FreighterNetworkApi = {
+interface FreighterNetworkApi {
   setNetwork?: (network: string) => Promise<unknown>;
-};
-
-function getFreighterNetworkApi(): FreighterNetworkApi {
-  return freighterApi as unknown as FreighterNetworkApi;
 }
 
-function getNetworkSwitchError(response: unknown): string | null {
-  if (!response || typeof response !== "object") return null;
-
-  const result = response as {
-    isSuccess?: boolean;
-    error?: unknown;
-  };
-
-  if (result.isSuccess === false) {
-    if (typeof result.error === "string") return result.error;
-    if (result.error instanceof Error) return result.error.message;
-    return "Freighter could not switch networks";
-  }
-
-  return null;
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return "Freighter could not switch networks";
 }
 
 export function WalletConnect() {
@@ -56,7 +40,7 @@ export function WalletConnect() {
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
-  const [networkSwitchMessage, setNetworkSwitchMessage] = useState<string | null>(
+  const [networkSwitchError, setNetworkSwitchError] = useState<string | null>(
     null,
   );
 
@@ -72,30 +56,32 @@ export function WalletConnect() {
   };
 
   const handleSwitchToTestnet = async () => {
-    setNetworkSwitchMessage(null);
     setSwitchingNetwork(true);
+    setNetworkSwitchError(null);
 
     try {
-      const { setNetwork } = getFreighterNetworkApi();
+      const freighter =
+        (await import("@stellar/freighter-api")) as unknown as FreighterNetworkApi;
 
-      if (!setNetwork) {
-        setNetworkSwitchMessage(
-          "Freighter cannot switch networks from this browser version. Open Freighter, select Testnet, then reconnect your wallet.",
+      if (typeof freighter.setNetwork !== "function") {
+        throw new Error(
+          "Your Freighter version does not support network switching from this app.",
         );
-        return;
       }
 
-      const response = await setNetwork("TESTNET");
-      const responseError = getNetworkSwitchError(response);
-      if (responseError) throw new Error(responseError);
+      const response = await freighter.setNetwork("TESTNET");
+      if (
+        response &&
+        typeof response === "object" &&
+        "error" in response &&
+        response.error
+      ) {
+        throw new Error(String(response.error));
+      }
 
       await connectWallet();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to switch networks";
-      setNetworkSwitchMessage(
-        `Freighter did not switch networks${message ? `: ${message}` : "."} Open Freighter, select Testnet, then reconnect your wallet.`,
-      );
+      setNetworkSwitchError(getErrorMessage(error));
     } finally {
       setSwitchingNetwork(false);
     }
@@ -124,19 +110,19 @@ export function WalletConnect() {
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
       {/* Network Badge */}
       {connected && (
-        <div className="flex items-center gap-2">
-          {network === "testnet" ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              Testnet
-            </span>
-          ) : network === "mainnet" ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Mainnet
-            </span>
-          ) : (
-            <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            {network === "testnet" ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Testnet
+              </span>
+            ) : network === "mainnet" ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Mainnet
+              </span>
+            ) : (
               <Button
                 variant="outline"
                 size="sm"
@@ -147,22 +133,29 @@ export function WalletConnect() {
                 {switchingNetwork && (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
-                {switchingNetwork ? "Switching..." : "Switch to Testnet"}
+                {switchingNetwork ? "SWITCHING..." : "Switch to Testnet"}
               </Button>
-              {networkSwitchMessage && (
-                <div className="flex max-w-xs flex-wrap items-center gap-1 text-[10px] leading-relaxed text-amber-400">
-                  <span>{networkSwitchMessage}</span>
-                  <a
-                    href="https://www.freighter.app/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-bold underline hover:text-amber-300"
-                  >
-                    Open Freighter
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
+            )}
+          </div>
+
+          {networkSwitchError && (
+            <div className="flex flex-col gap-1 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-2">
+              <span className="flex items-start gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Open Freighter, switch its network to Testnet, then reconnect
+                  your wallet.
+                </span>
+              </span>
+              <a
+                href="https://www.freighter.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold hover:underline"
+              >
+                <span>Open Freighter</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
             </div>
           )}
         </div>
