@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -72,6 +73,16 @@ func GetServerKeypair(seed string) (*keypair.Full, error) {
 	return keypair.ParseFull(seed)
 }
 
+// writeJSON sets the Content-Type header, writes the status code, encodes v as
+// JSON, and logs any encoding error at WARN level.
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Warn("failed to encode JSON response", "error", err)
+	}
+}
+
 func (h *APIHandler) ListenerHealth() *ListenerHealth {
 	if h.listenerHealth == nil {
 		h.listenerHealth = NewListenerHealth()
@@ -108,6 +119,10 @@ type JsonRpcResponse struct {
 	} `json:"error"`
 }
 
+var sorobanRPCClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 func CallSorobanRPC(ctx context.Context, rpcURL string, method string, params interface{}, result interface{}) error {
 	reqBody := JsonRpcRequest{
 		Jsonrpc: "2.0",
@@ -127,7 +142,7 @@ func CallSorobanRPC(ctx context.Context, rpcURL string, method string, params in
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sorobanRPCClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -456,8 +471,7 @@ func (h *APIHandler) HandleGetAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, http.StatusOK, map[string]string{
 		"transaction":        xdrString,
 		"network_passphrase": h.cfg.NetworkPassphrase,
 	})
@@ -490,8 +504,7 @@ func (h *APIHandler) HandlePostAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, http.StatusOK, map[string]string{
 		"token": token,
 	})
 }
@@ -508,7 +521,11 @@ func (h *APIHandler) HandleCreateInvoice(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	issuer := r.Context().Value("user_address").(string)
+	issuer, ok := GetUserAddress(r.Context())
+	if !ok || issuer == "" {
+		http.Error(w, "Unauthorized: user address missing from context", http.StatusUnauthorized)
+		return
+	}
 
 	if body.Buyer == "" || body.FaceValue == "" || body.DueDate <= 0 {
 		http.Error(w, "missing required invoice parameters", http.StatusBadRequest)
@@ -708,12 +725,15 @@ func (h *APIHandler) HandleCreateInvoice(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		time.Sleep(pollDelay)
+		select {
+		case <-r.Context().Done():
+			http.Error(w, "request cancelled: "+r.Context().Err().Error(), http.StatusGatewayTimeout)
+			return
+		case <-time.After(pollDelay):
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, http.StatusCreated, map[string]string{
 		"invoice_id":       invoiceID,
 		"transaction_hash": submitResp.Hash,
 		"status":           txResult.Status,
@@ -739,8 +759,7 @@ func (h *APIHandler) HandleGetInvoiceByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(invoice)
+	writeJSON(w, http.StatusOK, invoice)
 }
 
 // GET /invoices
@@ -800,8 +819,7 @@ func (h *APIHandler) HandleGetInvoices(w http.ResponseWriter, r *http.Request) {
 		"totalPages": totalPages,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // GET /stats
@@ -811,8 +829,7 @@ func (h *APIHandler) HandleGetStats(w http.ResponseWriter, r *http.Request) {
 	if h.statsData != nil && time.Since(h.statsCached) < 30*time.Second {
 		data := h.statsData
 		h.statsMu.RUnlock()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(data)
+		writeJSON(w, http.StatusOK, data)
 		return
 	}
 	h.statsMu.RUnlock()
@@ -824,8 +841,7 @@ func (h *APIHandler) HandleGetStats(w http.ResponseWriter, r *http.Request) {
 	if h.statsData != nil && time.Since(h.statsCached) < 30*time.Second {
 		data := h.statsData
 		h.statsMu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(data)
+		writeJSON(w, http.StatusOK, data)
 		return
 	}
 
@@ -841,8 +857,7 @@ func (h *APIHandler) HandleGetStats(w http.ResponseWriter, r *http.Request) {
 	h.statsCached = time.Now()
 	h.statsMu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	writeJSON(w, http.StatusOK, stats)
 }
 
 // GET /pool/stats
@@ -865,8 +880,7 @@ func (h *APIHandler) HandleGetPoolStats(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	writeJSON(w, http.StatusOK, stats)
 }
 
 // GET /events
@@ -889,8 +903,7 @@ func (h *APIHandler) HandleGetEvents(w http.ResponseWriter, r *http.Request) {
 		events = []*db.EventLog{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+	writeJSON(w, http.StatusOK, events)
 }
 
 // GET /pool/position/{address}
@@ -936,8 +949,7 @@ func (h *APIHandler) HandleGetLPPosition(w http.ResponseWriter, r *http.Request)
 		depositCount = int(xdrutil.ParseU32(val))
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"shares":        shares,
 		"usdc_value":    usdcValue,
 		"yield_earned":  yieldEarned,

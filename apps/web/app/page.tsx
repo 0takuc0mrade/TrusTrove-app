@@ -9,6 +9,7 @@ import { DiscountCalculator } from "@/components/shared/DiscountCalculator";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { SkeletonShimmer } from "@/components/shared/SkeletonLoader";
 import { usePool } from "@/hooks/usePool";
+import { useStats } from "@/hooks/useStats";
 import {
   ShieldCheck,
   FileCheck2,
@@ -19,8 +20,18 @@ import {
   Landmark,
 } from "lucide-react";
 
+const specificationUrl = "https://k1ngd4vid.gitbook.io/trustrove/";
+const stellarExpertUrl = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID
+  ? `https://stellar.expert/explorer/testnet/contract/${process.env.NEXT_PUBLIC_POOL_CONTRACT_ID}`
+  : "https://stellar.expert/explorer/testnet";
+
 export default function Home() {
   const { stats, isStatsLoading, statsError } = usePool();
+  const {
+    stats: protocolStats,
+    isLoading: isProtocolStatsLoading,
+    error: protocolStatsError,
+  } = useStats();
 
   // Compact USDC formatting (e.g. "12.4M") derived from the stroop-denominated stat.
   const formatCompactUsdc = (amount: bigint | undefined): string | null => {
@@ -33,11 +44,15 @@ export default function Home() {
   };
 
   // Per-stat renderer: skeleton while loading, graceful fallback when the indexer is unavailable.
-  const renderStat = (value: string | null) => {
-    if (isStatsLoading) {
+  const renderStat = (
+    value: string | null,
+    isLoading?: boolean,
+    error?: any,
+  ) => {
+    if (isLoading) {
       return <SkeletonShimmer className="h-7 w-20 mx-auto lg:mx-0" />;
     }
-    if (statsError || value === null) {
+    if (error || value === null) {
       return (
         <span className="text-xl sm:text-2xl font-bold font-mono text-slate-600 block">
           —
@@ -244,7 +259,13 @@ export default function Home() {
               </p>
               <div className="bg-[#080c10] border border-border/40 p-2.5 rounded text-[10px] font-mono flex justify-between text-slate-500">
                 <span>VERIFIED ISSUERS:</span>
-                <span className="text-white font-bold">142 registered</span>
+                {renderStat(
+                  protocolStats
+                    ? `${protocolStats.registered_issuers} registered`
+                    : null,
+                  isProtocolStatsLoading,
+                  protocolStatsError,
+                )}
               </div>
             </div>
 
@@ -262,7 +283,13 @@ export default function Home() {
               </p>
               <div className="bg-[#080c10] border border-border/40 p-2.5 rounded text-[10px] font-mono flex justify-between text-slate-500">
                 <span>TOTAL OBLIGATIONS:</span>
-                <span className="text-white font-bold">8,920 invoices</span>
+                {renderStat(
+                  protocolStats
+                    ? `${protocolStats.total_invoices.toLocaleString()} invoices`
+                    : null,
+                  isProtocolStatsLoading,
+                  protocolStatsError,
+                )}
               </div>
             </div>
 
@@ -317,10 +344,20 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <span>© 2026 TRUSTROVE PROTOCOL — VERIFIED TRADE FINANCE</span>
           <div className="flex gap-4">
-            <a href="#" className="hover:text-primary transition-colors">
+            <a
+              href={specificationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+            >
               SPECIFICATION
             </a>
-            <a href="#" className="hover:text-primary transition-colors">
+            <a
+              href={stellarExpertUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+            >
               STELLAR EXPERT
             </a>
             <Link href="/docs" className="hover:text-primary transition-colors">
