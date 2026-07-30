@@ -162,7 +162,8 @@ export class BaseContractClient {
     }
     const resultVal = (sim as rpc.Api.SimulateTransactionSuccessResponse).result
       ?.retval;
-    if (!resultVal) throw new Error(`No return value from simulation for ${method}`);
+    if (!resultVal)
+      throw new Error(`No return value from simulation for ${method}`);
     return parse(resultVal);
   }
 
@@ -182,26 +183,38 @@ export class BaseContractClient {
       .setTimeout(30)
       .build();
     const sim = await withRetry(() => server.simulateTransaction(tx));
-    if (rpc.Api.isSimulationError(sim)) throw new Error(`Simulation failed for ${method}: ${sim.error}`);
+    if (rpc.Api.isSimulationError(sim))
+      throw new Error(`Simulation failed for ${method}: ${sim.error}`);
     const prepared = await withRetry(() => server.prepareTransaction(tx));
     const signed = await signTransactionCompat(prepared.toXDR(), {
-      network: config.networkPassphrase === Networks.PUBLIC ? "PUBLIC" : "TESTNET",
+      network:
+        config.networkPassphrase === Networks.PUBLIC ? "PUBLIC" : "TESTNET",
       networkPassphrase: config.networkPassphrase,
       accountToSign: publicKey,
     });
     const result = await withRetry(() =>
-      server.sendTransaction(TransactionBuilder.fromXDR(signed, config.networkPassphrase)),
+      server.sendTransaction(
+        TransactionBuilder.fromXDR(signed, config.networkPassphrase),
+      ),
     );
-    if (result.status === "ERROR") throw new Error(`Send failed for ${method}: ${result.errorResult?.toXDR()}`);
+    if (result.status === "ERROR")
+      throw new Error(
+        `Send failed for ${method}: ${result.errorResult?.toXDR()}`,
+      );
     let response = await withRetry(() => server.getTransaction(result.hash));
     let attempts = 1;
-    while (response.status === rpc.Api.GetTransactionStatus.NOT_FOUND && attempts < MAX_TRANSACTION_POLL_ATTEMPTS) {
+    while (
+      response.status === rpc.Api.GetTransactionStatus.NOT_FOUND &&
+      attempts < MAX_TRANSACTION_POLL_ATTEMPTS
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       response = await withRetry(() => server.getTransaction(result.hash));
       attempts++;
     }
-    if (response.status === rpc.Api.GetTransactionStatus.NOT_FOUND) throw new TransactionTimeoutError(result.hash);
-    if (response.status === rpc.Api.GetTransactionStatus.FAILED) throw new Error(`Transaction failed on-chain for ${method}`);
+    if (response.status === rpc.Api.GetTransactionStatus.NOT_FOUND)
+      throw new TransactionTimeoutError(result.hash);
+    if (response.status === rpc.Api.GetTransactionStatus.FAILED)
+      throw new Error(`Transaction failed on-chain for ${method}`);
     return result.hash;
   }
 
@@ -221,9 +234,11 @@ export class BaseContractClient {
       .setTimeout(30)
       .build();
     const sim = await withRetry(() => server.simulateTransaction(tx));
-    if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error || "Simulation failed");
+    if (rpc.Api.isSimulationError(sim))
+      throw new Error(sim.error || "Simulation failed");
     const footprintSize = sim.transactionData
-      ? sim.transactionData.getReadOnly().length + sim.transactionData.getReadWrite().length
+      ? sim.transactionData.getReadOnly().length +
+        sim.transactionData.getReadWrite().length
       : 0;
     const retval = sim.result?.retval;
     let expectedResult: unknown = undefined;

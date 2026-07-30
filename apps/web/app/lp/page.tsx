@@ -11,6 +11,28 @@ import { Address, nativeToScVal } from "@stellar/stellar-sdk";
 
 const poolContractID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID || "";
 
+type SimulationDetails = {
+  estimatedFeeXlm: string;
+  functionName: string;
+  expectedResult: unknown;
+  footprintSize: number;
+};
+
+type StatsWithSharePrice = {
+  sharePrice?: bigint | number | string;
+};
+
+function formatSharePrice(
+  value: bigint | number | string | undefined,
+): number | null {
+  if (value === undefined) return null;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
+  return typeof value === "bigint" || numericValue >= 10_000_000
+    ? numericValue / 10_000_000
+    : numericValue;
+}
+
 export default function LPDashboard() {
   const { connected, address } = useWalletStore();
   const { deposit, isDepositing } = usePool();
@@ -31,8 +53,6 @@ export default function LPDashboard() {
     const timer = setTimeout(async () => {
       setIsSimulating(true);
       setSimError(null);
-      setSimDetails(null);
-
       try {
         const amountStroops = BigInt(Math.floor(amount * 10_000_000));
         const client = new PoolClient(poolContractID);
@@ -78,7 +98,10 @@ export default function LPDashboard() {
     const amount = Number(depositAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    await deposit({ amount: BigInt(Math.floor(amount * 10_000_000)) });
+    await deposit({
+      amount: BigInt(Math.floor(amount * 10_000_000)),
+      asset: "USDC",
+    });
     setDepositAmount("");
   };
 
@@ -94,8 +117,14 @@ export default function LPDashboard() {
           </p>
         </div>
 
-        <form onSubmit={handleDeposit} className="space-y-4 rounded-lg border border-border bg-card p-6">
-          <label htmlFor="deposit-amount" className="block text-sm text-slate-300">
+        <form
+          onSubmit={handleDeposit}
+          className="space-y-4 rounded-lg border border-border bg-card p-6"
+        >
+          <label
+            htmlFor="deposit-amount"
+            className="block text-sm text-slate-300"
+          >
             Deposit amount
           </label>
           <input
