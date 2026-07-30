@@ -70,10 +70,26 @@ type GetEventsParams struct {
 type EventListener struct {
 	cfg    *config.Config
 	health *api.ListenerHealth
+
+	// dependency-injectable storage helpers. Defaults are wired in
+	// NewEventListener so production behavior is unchanged; tests in this
+	// package can override individual fields to avoid requiring a live DB
+	// for the bookkeeping paths.
+	getCheckpointFn            func(context.Context) (int32, error)
+	getLatestProcessedLedgerFn func(context.Context) (int32, error)
+	upsertCheckpointFn         func(context.Context, int32) error
+	isEventProcessedFn         func(context.Context, string) (bool, error)
 }
 
 func NewEventListener(cfg *config.Config, health *api.ListenerHealth) *EventListener {
-	return &EventListener{cfg: cfg, health: health}
+	return &EventListener{
+		cfg:                        cfg,
+		health:                     health,
+		getCheckpointFn:            db.GetCheckpoint,
+		getLatestProcessedLedgerFn: db.GetLatestProcessedLedger,
+		upsertCheckpointFn:         db.UpsertCheckpoint,
+		isEventProcessedFn:         db.IsEventProcessed,
+	}
 }
 
 func (l *EventListener) getLatestLedgerSequence(ctx context.Context) (int32, error) {
@@ -98,14 +114,15 @@ func (l *EventListener) Start(ctx context.Context) error {
 
 	// 1. Determine start ledger sequence
 	// Prefer checkpoint for accurate resume across empty-ledger ranges
-	currentLedger, err := db.GetCheckpoint(ctx)
+	currentLedger, err := l.getCheckpointFn(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get checkpoint: %w", err)
 	}
 	if currentLedger > 0 {
 		slog.Info("Resuming event indexing from checkpoint", "startLedger", currentLedger)
 	} else {
-		startLedger, err := db.GetLatestProcessedLedger(ctx)
+		// Fallback: use MAX(ledger) from events_log for backward compatibility
+		startLedger, err := l.getLatestProcessedLedgerFn(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get latest processed ledger: %w", err)
 		}
@@ -150,7 +167,9 @@ func (l *EventListener) Start(ctx context.Context) error {
 				l.health.MarkHeartbeat()
 			}
 			currentLedger = nextLedger
-			if err := db.UpsertCheckpoint(ctx, currentLedger); err != nil {
+
+			// Persist checkpoint so restart resumes from this exact ledger
+			if err := l.upsertCheckpointFn(ctx, currentLedger); err != nil {
 				slog.Error("Failed to save checkpoint", "ledger", currentLedger, "error", err)
 			}
 		}
@@ -199,7 +218,27 @@ func (l *EventListener) pollEvents(ctx context.Context, startLedger int32) (int3
 			latestLedgerSeq = int32(res.LatestLedger)
 		}
 		for _, ev := range res.Events {
-			events = append(events, SorobanEvent{ID: ev.ID, ContractID: ev.ContractID, Ledger: ev.Ledger, LedgerClosedAt: ev.LedgerClosedAt, Topic: ev.Topic, Value: ev.Value.Xdr})
+			sorobanEv := SorobanEvent{
+				ID:             ev.ID,
+				ContractID:     ev.ContractID,
+				Ledger:         ev.Ledger,
+				LedgerClosedAt: ev.LedgerClosedAt,
+				Topic:          ev.Topic,
+				Value:          ev.Value.Xdr,
+			}
+
+			processed, err := l.isEventProcessedFn(ctx, sorobanEv.ID)
+			if err != nil {
+				slog.Error("Failed to check if event is processed", "eventId", sorobanEv.ID, "error", err)
+			}
+			if processed {
+				continue
+			}
+
+			err = l.handleEvent(ctx, sorobanEv)
+			if err != nil {
+				return startLedger, fmt.Errorf("handle event %s: %w", sorobanEv.ID, err)
+			}
 		}
 		if res.Cursor != "" && len(res.Events) > 0 {
 			cursor = res.Cursor
