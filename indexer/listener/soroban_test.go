@@ -13,6 +13,8 @@ import (
 
 	"trusttrove/indexer/api"
 	"trusttrove/indexer/config"
+
+	"github.com/stellar/go-stellar-sdk/keypair"
 )
 
 // stubSorobanRPC starts an httptest.Server that responds with a JSON-RPC
@@ -49,10 +51,14 @@ func stubSorobanRPC(t *testing.T, handler func(method string) (body any, status 
 // Override individual fields in a test when its scenario needs real behavior.
 func newTestEventListener(t *testing.T, cfgOverrides ...func(*config.Config)) *EventListener {
 	t.Helper()
+	kp, err := keypair.Random()
+	if err != nil {
+		t.Fatalf("failed to generate random keypair: %v", err)
+	}
 	cfg := &config.Config{
 		StellarNetwork:        "testnet",
 		IndexerPollIntervalMs: 50,
-		ServerSeed:            "SDOEXAMPLEKEYPAIRXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+		ServerSeed:            kp.Seed(),
 		NetworkPassphrase:     "Test SDF Network ; September 2015",
 		JWTSecret:             "test-secret",
 	}
