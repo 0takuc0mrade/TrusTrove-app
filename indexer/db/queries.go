@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -94,9 +95,9 @@ func InsertInvoice(ctx context.Context, inv *DbInvoice) error {
 		"id":                 inv.ID,
 		"issuer":             inv.Issuer,
 		"buyer":              inv.Buyer,
-		"face_value":        inv.FaceValue,
-		"discount_bps":      inv.DiscountBps,
-		"funded_amount":     inv.FundedAmount,
+		"face_value":         inv.FaceValue,
+		"discount_bps":       inv.DiscountBps,
+		"funded_amount":      inv.FundedAmount,
 		"due_date":           inv.DueDate,
 		"status":             inv.Status,
 		"created_at":         inv.CreatedAt,
@@ -336,7 +337,7 @@ func LogEvent(ctx context.Context, eventID, contractID string, ledger int32, led
 	if err != nil {
 		return fmt.Errorf("queries: log event: %w", err)
 	}
-	return invoices, total, nil
+	return nil
 }
 
 // AreEventsProcessed returns the event IDs from ids that have already been
@@ -372,4 +373,72 @@ func IsEventProcessed(ctx context.Context, id string) (bool, error) {
 		return false, err
 	}
 	return processed[id], nil
+}
+
+type EventLog struct {
+	ID             int             `json:"id"`
+	EventID        string          `json:"event_id"`
+	ContractID     string          `json:"contract_id"`
+	Ledger         int32           `json:"ledger"`
+	LedgerClosedAt int64           `json:"ledger_closed_at"`
+	EventType      string          `json:"event_type"`
+	Data           json.RawMessage `json:"data"`
+}
+
+func GetRecentEvents(ctx context.Context, limit int) ([]*EventLog, error) {
+	query := `
+		SELECT id, event_id, contract_id, ledger, ledger_closed_at, event_type, data
+		FROM events_log
+		ORDER BY ledger_closed_at DESC
+		LIMIT $1
+	`
+	rows, err := Pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("queries: get recent events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*EventLog
+	for rows.Next() {
+		var ev EventLog
+		err := rows.Scan(&ev.ID, &ev.EventID, &ev.ContractID, &ev.Ledger, &ev.LedgerClosedAt, &ev.EventType, &ev.Data)
+		if err != nil {
+			return nil, fmt.Errorf("queries: scan event: %w", err)
+		}
+		events = append(events, &ev)
+	}
+	return events, nil
+}
+
+func GetLatestProcessedLedger(ctx context.Context) (int32, error) {
+	query := `SELECT COALESCE(MAX(ledger), 0) FROM events_log`
+	var ledger int32
+	err := Pool.QueryRow(ctx, query).Scan(&ledger)
+	if err != nil {
+		return 0, fmt.Errorf("queries: get latest processed ledger: %w", err)
+	}
+	return ledger, nil
+}
+
+func GetCheckpoint(ctx context.Context) (int32, error) {
+	query := `SELECT value FROM indexer_checkpoint WHERE key = 'latest_processed_ledger'`
+	var ledger int32
+	err := Pool.QueryRow(ctx, query).Scan(&ledger)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("queries: get checkpoint: %w", err)
+	}
+	return ledger, nil
+}
+
+func UpsertCheckpoint(ctx context.Context, ledger int32) error {
+	query := `INSERT INTO indexer_checkpoint (key, value) VALUES ('latest_processed_ledger', $1)
+	          ON CONFLICT (key) DO UPDATE SET value = $1`
+	_, err := Pool.Exec(ctx, query, ledger)
+	if err != nil {
+		return fmt.Errorf("queries: upsert checkpoint: %w", err)
+	}
+	return nil
 }
