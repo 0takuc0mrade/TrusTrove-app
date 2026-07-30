@@ -4,6 +4,17 @@ import { Invoice, InvoiceStatus } from '../types/index.js';
 import { parseInvoice } from '../types/schemas.js';
 
 export class InvoiceClient extends BaseContractClient {
+  /**
+   * Creates a new invoice on-chain.
+   *
+   * @param issuer - The Stellar address of the invoice issuer (SME). Must match `signerPublicKey`.
+   * @param buyer - The Stellar address of the buyer who will be invoiced.
+   * @param faceValue - The face value of the invoice in stroops (u128).
+   * @param dueDate - The Unix timestamp (seconds) when payment is due.
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Must be the issuer.
+   * @returns The transaction hash of the on-chain submission.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async create(
     issuer: string,
     buyer: string,
@@ -20,6 +31,16 @@ export class InvoiceClient extends BaseContractClient {
     return this.writeContract('create', args, signerPublicKey);
   }
 
+  /**
+   * Lists an existing invoice for public financing on the marketplace.
+   * Side effect: the invoice status transitions to `Listed`.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param discountBps - The discount rate in basis points (e.g. 500 = 5%).
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Must be the invoice issuer.
+   * @returns `true` when the transaction succeeds on-chain.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async listForFinancing(
     invoiceIdHex: string,
     discountBps: number,
@@ -32,11 +53,30 @@ export class InvoiceClient extends BaseContractClient {
     return this.writeContract('list_for_financing', args, signerPublicKey).then(() => true);
   }
 
+  /**
+   * Marks an invoice as shipped on-chain.
+   * Side effect: the invoice status transitions to `Active` if funded, or records the shipment timestamp.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Must be the invoice issuer.
+   * @returns `true` when the transaction succeeds on-chain.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async markShipped(invoiceIdHex: string, signerPublicKey: string): Promise<boolean> {
     const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
     return this.writeContract('mark_shipped', args, signerPublicKey).then(() => true);
   }
 
+  /**
+   * Confirms delivery of goods for an invoice on-chain.
+   * Side effect: updates the confirmation status for the provided `confirmerAddress`.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param confirmerAddress - The Stellar address whose delivery confirmation is being recorded.
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Must be the buyer or issuer.
+   * @returns `true` when the transaction succeeds on-chain.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async confirmDelivery(
     invoiceIdHex: string,
     confirmerAddress: string,
@@ -49,16 +89,43 @@ export class InvoiceClient extends BaseContractClient {
     return this.writeContract('confirm_delivery', args, signerPublicKey).then(() => true);
   }
 
+  /**
+   * Repays a financed invoice on-chain, returning funds to the liquidity pool.
+   * Side effect: the invoice status transitions to `Repaid` and LP yield is distributed.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Must be the invoice buyer.
+   * @returns `true` when the transaction succeeds on-chain.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async repay(invoiceIdHex: string, signerPublicKey: string): Promise<boolean> {
     const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
     return this.writeContract('repay', args, signerPublicKey).then(() => true);
   }
 
+  /**
+   * Triggers default on an overdue invoice on-chain.
+   * Side effect: the invoice status transitions to `Defaulted` and collateral may be released to LPs.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param signerPublicKey - The Stellar public key that will sign the transaction. Can be any party (typically an LP).
+   * @returns `true` when the transaction succeeds on-chain.
+   * @throws If the transaction simulation fails or the on-chain submission errors.
+   */
   async triggerDefault(invoiceIdHex: string, signerPublicKey: string): Promise<boolean> {
     const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
     return this.writeContract('trigger_default', args, signerPublicKey).then(() => true);
   }
 
+  /**
+   * Retrieves a single invoice by its on-chain ID.
+   * This is a read-only (simulated) call — no on-chain side effects.
+   *
+   * @param invoiceIdHex - The invoice ID as a 32-byte hex string.
+   * @param signerPublicKey - The Stellar public key used to simulate the read call.
+   * @returns The parsed {@link Invoice} object.
+   * @throws If the simulation fails or the return value cannot be parsed.
+   */
   async get(invoiceIdHex: string, signerPublicKey: string): Promise<Invoice> {
     const args = [xdr.ScVal.scvBytes(Buffer.from(invoiceIdHex, 'hex'))];
     return this.readContract(
@@ -69,6 +136,15 @@ export class InvoiceClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Retrieves all invoices matching a given status.
+   * This is a read-only (simulated) call — no on-chain side effects.
+   *
+   * @param status - The {@link InvoiceStatus} to filter by.
+   * @param signerPublicKey - The Stellar public key used to simulate the read call.
+   * @returns An array of matching {@link Invoice} objects, or an empty array if none match.
+   * @throws If the simulation fails or the return value cannot be parsed.
+   */
   async getByStatus(status: InvoiceStatus, signerPublicKey: string): Promise<Invoice[]> {
     const args = [nativeToScVal(status, { type: 'symbol' })];
     return this.readContract(
@@ -83,6 +159,15 @@ export class InvoiceClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Retrieves all invoices issued by a given address.
+   * This is a read-only (simulated) call — no on-chain side effects.
+   *
+   * @param address - The Stellar address of the issuer to query.
+   * @param signerPublicKey - The Stellar public key used to simulate the read call.
+   * @returns An array of matching {@link Invoice} objects, or an empty array if none match.
+   * @throws If the simulation fails or the return value cannot be parsed.
+   */
   async getByIssuer(address: string, signerPublicKey: string): Promise<Invoice[]> {
     const args = [new Address(address).toScVal()];
     return this.readContract(
@@ -97,6 +182,15 @@ export class InvoiceClient extends BaseContractClient {
     );
   }
 
+  /**
+   * Retrieves all invoices assigned to a given buyer address.
+   * This is a read-only (simulated) call — no on-chain side effects.
+   *
+   * @param address - The Stellar address of the buyer to query.
+   * @param signerPublicKey - The Stellar public key used to simulate the read call.
+   * @returns An array of matching {@link Invoice} objects, or an empty array if none match.
+   * @throws If the simulation fails or the return value cannot be parsed.
+   */
   async getByBuyer(address: string, signerPublicKey: string): Promise<Invoice[]> {
     const args = [new Address(address).toScVal()];
     return this.readContract(
