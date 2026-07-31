@@ -1,29 +1,24 @@
-import { Address, nativeToScVal, scValToNative } from '@stellar/stellar-sdk';
-import { BaseContractClient } from '../base.js';
-import { Profile } from '../types/index.js';
-import { parseProfile } from '../types/schemas.js';
+import { Address, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
+import { BaseContractClient } from "../base.js";
+import { Profile } from "../types/index.js";
+import { parseProfile } from "../types/schemas.js";
 
 export class RegistryClient extends BaseContractClient {
-  /**
-   * Registers an SME as a verified invoice issuer on-chain.
-   * Side effect: stores a `Profile` with `role: Issuer` and `verified: true`, and emits an `issuer_registered` event.
-   *
-   * @param address - The Stellar address to register as an issuer. Must match `signerPublicKey`.
-   * @param metadata - Arbitrary key-value metadata stored alongside the issuer profile.
-   * @param signerPublicKey - The Stellar public key that will sign the transaction. `address.require_auth()` is enforced on-chain.
-   * @returns The transaction hash of the on-chain submission.
-   * @throws If the address is already registered (`AlreadyRegistered`), the transaction simulation fails, or on-chain submission errors.
-   */
+  async initialize(
+    adminAddress: string,
+    signerPublicKey: string,
+  ): Promise<string> {
+    const args = [new Address(adminAddress).toScVal()];
+    return this.writeContract("initialize", args, signerPublicKey);
+  }
+
   async registerIssuer(
     address: string,
     metadata: Record<string, string>,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<string> {
-    const args = [
-      new Address(address).toScVal(),
-      nativeToScVal(metadata),
-    ];
-    return this.writeContract('register_issuer', args, signerPublicKey);
+    const args = [new Address(address).toScVal(), nativeToScVal(metadata)];
+    return this.writeContract("register_issuer", args, signerPublicKey);
   }
 
   /**
@@ -39,13 +34,10 @@ export class RegistryClient extends BaseContractClient {
   async registerBuyer(
     address: string,
     metadata: Record<string, string>,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<string> {
-    const args = [
-      new Address(address).toScVal(),
-      nativeToScVal(metadata),
-    ];
-    return this.writeContract('register_buyer', args, signerPublicKey);
+    const args = [new Address(address).toScVal(), nativeToScVal(metadata)];
+    return this.writeContract("register_buyer", args, signerPublicKey);
   }
 
   /**
@@ -60,10 +52,10 @@ export class RegistryClient extends BaseContractClient {
   async isVerified(address: string, signerPublicKey: string): Promise<boolean> {
     const args = [new Address(address).toScVal()];
     return this.readContract(
-      'is_verified',
+      "is_verified",
       args,
       signerPublicKey,
-      (val) => !!scValToNative(val)
+      (val) => !!scValToNative(val),
     );
   }
 
@@ -78,11 +70,8 @@ export class RegistryClient extends BaseContractClient {
    */
   async getProfile(address: string, signerPublicKey: string): Promise<Profile> {
     const args = [new Address(address).toScVal()];
-    return this.readContract(
-      'get_profile',
-      args,
-      signerPublicKey,
-      (val) => parseProfile(scValToNative(val))
+    return this.readContract("get_profile", args, signerPublicKey, (val) =>
+      parseProfile(scValToNative(val)),
     );
   }
 
@@ -97,6 +86,6 @@ export class RegistryClient extends BaseContractClient {
    */
   async revoke(address: string, signerPublicKey: string): Promise<string> {
     const args = [new Address(address).toScVal()];
-    return this.writeContract('revoke', args, signerPublicKey);
+    return this.writeContract("revoke", args, signerPublicKey);
   }
 }
