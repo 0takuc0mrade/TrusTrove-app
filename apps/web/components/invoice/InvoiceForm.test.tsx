@@ -18,7 +18,13 @@ vi.mock("@stellar/stellar-sdk", () => ({
 
 // Mock DatePicker to simplify testing
 vi.mock("@/components/ui/date-picker", () => ({
-  DatePicker: ({ value, onChange }: { value?: string; onChange: (value: string) => void }) => (
+  DatePicker: ({
+    value,
+    onChange,
+  }: {
+    value?: string;
+    onChange: (value: string) => void;
+  }) => (
     <input
       type="date"
       data-testid="date-picker"
@@ -43,7 +49,9 @@ describe("InvoiceForm Component Boundary Tests", () => {
     expect(screen.getByText(/buyer wallet address/i)).toBeInTheDocument();
     expect(screen.getByText(/face value/i)).toBeInTheDocument();
     expect(screen.getByText(/asset/i)).toBeInTheDocument();
-    expect(screen.getByText(/select invoice maturity date/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/select invoice maturity date/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /review financing terms/i }),
     ).toBeInTheDocument();
