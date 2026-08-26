@@ -89,18 +89,6 @@ Yield distributes to LP shares
 
 ---
 
-## Verification Gate (Underwrite Integration)
-
-Before an invoice can be listed for financing via `list_for_financing`, it must have a stored risk attestation. Without one, the contract panics with `VerificationRequired`.
-
-**How it works:** A registered [Underwrite](https://github.com/TrusTrove/underwrite-contract) agent evaluates the invoice off-chain and submits a secp256k1-signed attestation permissionlessly (no auth required). The `invoice_contract` recovers the signer's public key and verifies it against the agent's registered pubkey stored in the **agent-registry** contract — a separate contract deployed from the separate [`underwrite-contract`](https://github.com/TrusTrove/underwrite-contract) repo. If the key doesn't match or the agent isn't active, the call panics with `UntrustedSigner`.
-
-The agent-registry address is stored in the invoice contract's own storage and set once at `initialize`. The `AGENT_REGISTRY_CONTRACT` variable in `.env.example` is currently blank because it must be filled in once the agent-registry is deployed.
-
-This dependency is **external** — the agent-registry and underwrite-contract are not part of this monorepo. For full contract-level detail, see [`docs/smart-contracts/invoice-contract.md#submit_attestation`](./docs/smart-contracts/invoice-contract.md#submit_attestation).
-
----
-
 ## Configuration and API documentation
 
 - Root [`.env.example`](./.env.example) is the single source of truth for frontend, SDK, and Go indexer variables. It lists each variable's layer, type, required status, default value, description, and source.
