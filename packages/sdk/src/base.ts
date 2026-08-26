@@ -65,6 +65,13 @@ const signTransactionCompat = signTransactionFn as (
 
 const MAX_TRANSACTION_POLL_ATTEMPTS = 30;
 
+export interface SimulationResult {
+  estimatedFeeXlm: string;
+  functionName: string;
+  expectedResult: unknown;
+  footprintSize: number;
+}
+
 export class TransactionTimeoutError extends Error {
   readonly txHash: string;
 
@@ -241,12 +248,7 @@ export class BaseContractClient {
     method: string,
     args: xdr.ScVal[],
     publicKey: string,
-  ): Promise<{
-    estimatedFeeXlm: string;
-    functionName: string;
-    expectedResult: any;
-    footprintSize: number;
-  }> {
+  ): Promise<SimulationResult> {
     const config = getConfig();
     const server = getSorobanServer();
     const account = await withRetry(() => server.getAccount(publicKey));
@@ -270,7 +272,7 @@ export class BaseContractClient {
       : 0;
 
     const retval = sim.result?.retval;
-    let expectedResult: any = undefined;
+    let expectedResult: unknown = undefined;
     if (retval) {
       try {
         expectedResult = scValToNative(retval);
