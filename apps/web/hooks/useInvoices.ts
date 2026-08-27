@@ -10,6 +10,7 @@ import { useWalletStore } from "@/store/wallet";
 import { showSuccessToast } from "@/lib/toast";
 import { createErrorHandler } from "@/lib/errors";
 import { useTokenAllowance } from "./useTokenAllowance";
+import type { AssetType } from "@/types";
 
 const { handleMutationError } = createErrorHandler("useInvoices");
 
@@ -67,8 +68,12 @@ export function useInvoices(filters?: {
   const { address } = useWalletStore();
   const { ensureAllowance } = useTokenAllowance();
 
-  const invoiceClientRef = useRef<any>(null);
-  const poolClientRef = useRef<any>(null);
+  const invoiceClientRef = useRef<InstanceType<
+    typeof import("@trusttrove/sdk").InvoiceClient
+  > | null>(null);
+  const poolClientRef = useRef<InstanceType<
+    typeof import("@trusttrove/sdk").PoolClient
+  > | null>(null);
 
   const getInvoiceClient = useCallback(async () => {
     if (!invoiceClientRef.current) {
@@ -103,9 +108,9 @@ export function useInvoices(filters?: {
       buyer: string;
       faceValue: string;
       dueDate: number;
-      asset?: string;
+      asset?: AssetType;
     }) => {
-      return createInvoice(buyer, faceValue, dueDate, asset as any);
+      return createInvoice(buyer, faceValue, dueDate, asset);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -192,8 +197,9 @@ export function useInvoices(filters?: {
       const invoice = await client.get(invoiceId, address);
       try {
         await ensureAllowance(invoiceContractID, invoice.faceValue);
-      } catch (allowanceErr: any) {
-        const message = allowanceErr?.message || "";
+      } catch (allowanceErr: unknown) {
+        const message =
+          allowanceErr instanceof Error ? allowanceErr.message : "";
         if (
           message.toLowerCase().includes("user rejected") ||
           message.toLowerCase().includes("rejected") ||
