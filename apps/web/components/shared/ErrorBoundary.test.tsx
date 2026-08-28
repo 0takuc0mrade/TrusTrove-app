@@ -34,7 +34,12 @@ describe("ErrorBoundary", () => {
       );
     }
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const windowConsoleError = vi
+      .spyOn(window.console, "error")
+      .mockImplementation(() => {});
     try {
       render(
         <ErrorBoundary>
@@ -57,6 +62,7 @@ describe("ErrorBoundary", () => {
       expect(screen.getByText("Child content")).toBeInTheDocument();
     } finally {
       consoleError.mockRestore();
+      windowConsoleError.mockRestore();
     }
   });
 
@@ -67,7 +73,12 @@ describe("ErrorBoundary", () => {
         <button onClick={reset}>Reset boundary</button>
       </div>
     ));
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const windowConsoleError = vi
+      .spyOn(window.console, "error")
+      .mockImplementation(() => {});
 
     try {
       render(
@@ -91,6 +102,7 @@ describe("ErrorBoundary", () => {
       expect(fallback).toHaveBeenCalled();
     } finally {
       consoleError.mockRestore();
+      windowConsoleError.mockRestore();
     }
   });
 });
