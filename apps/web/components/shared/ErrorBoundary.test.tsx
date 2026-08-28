@@ -35,24 +35,29 @@ describe("ErrorBoundary", () => {
     }
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    render(
-      <ErrorBoundary>
-        <ResettableChild />
-      </ErrorBoundary>,
-    );
+    try {
+      render(
+        <ErrorBoundary>
+          <ResettableChild />
+        </ErrorBoundary>,
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cause error" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cause error" }));
 
-    expect(
-      screen.getByText("Something went wrong loading this."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Child failed")).toBeInTheDocument();
+      expect(
+        screen.getByText("Something went wrong loading this."),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Child failed")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(screen.getByRole("button", { name: "Cause error" })).toBeInTheDocument();
-    expect(screen.getByText("Child content")).toBeInTheDocument();
-    consoleError.mockRestore();
+      expect(
+        screen.getByRole("button", { name: "Cause error" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Child content")).toBeInTheDocument();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("uses the custom fallback with the error and reset callback", () => {
@@ -64,21 +69,28 @@ describe("ErrorBoundary", () => {
     ));
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    render(
-      <ErrorBoundary fallback={fallback} context="test">
-        <ThrowingChild shouldThrow={true} />
-      </ErrorBoundary>,
-    );
+    try {
+      render(
+        <ErrorBoundary fallback={fallback} context="test">
+          <ThrowingChild shouldThrow={true} />
+        </ErrorBoundary>,
+      );
 
-    expect(screen.getByText("Custom fallback: Child failed")).toBeInTheDocument();
-    expect(fallback).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Child failed" }),
-      expect.any(Function),
-    );
+      expect(
+        screen.getByText("Custom fallback: Child failed"),
+      ).toBeInTheDocument();
+      expect(fallback).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Child failed" }),
+        expect.any(Function),
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset boundary" }));
-    expect(screen.getByText("Custom fallback: Child failed")).toBeInTheDocument();
-    expect(fallback).toHaveBeenCalled();
-    consoleError.mockRestore();
+      fireEvent.click(screen.getByRole("button", { name: "Reset boundary" }));
+      expect(
+        screen.getByText("Custom fallback: Child failed"),
+      ).toBeInTheDocument();
+      expect(fallback).toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
