@@ -21,6 +21,7 @@
 | `INVOICE_CONTRACT_ID`              | Backend only       | Deployed invoice contract address        | `CA4O...`                                            |
 | `ESCROW_CONTRACT_ID`               | Backend only       | Deployed escrow contract address         | `CAJW...`                                            |
 | `POOL_CONTRACT_ID`                 | Backend only       | Deployed pool contract address           | `CAKE...`                                            |
+| `AGENT_REGISTRY_CONTRACT`          | Backend only       | Deployed agent-registry contract address (from the separate underwrite-contract repo) | `CABC...`                                            |
 | `USDC_ISSUER`                      | Backend only       | USDC issuer on Stellar testnet           | `GBBD...`                                            |
 | `USDC_ASSET_CODE`                  | Backend only       | USDC asset code                          | `USDC`                                               |
 | `DATABASE_URL`                     | Backend only       | Neon pooled connection string            | `postgresql://user:pass@host/db?sslmode=require`     |
