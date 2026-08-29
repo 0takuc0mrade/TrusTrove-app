@@ -24,6 +24,7 @@ import {
   Share2,
 } from "lucide-react";
 import { formatAmount } from "@/lib/assets";
+import { useConfirmDialogStore } from "@/store/confirmDialog";
 
 interface InvoiceDetailClientProps {
   invoiceId: string;
@@ -56,6 +57,7 @@ export default function InvoiceDetailClient({
   const { invoice, isLoading, refetch } = useInvoice(invoiceId);
   const { shipInvoice, confirmDelivery, repayInvoice, defaultInvoice } =
     useInvoices();
+  const { request: requestConfirmation } = useConfirmDialogStore();
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -439,11 +441,16 @@ export default function InvoiceDetailClient({
                     className="w-full"
                     disabled={submitting}
                     onClick={() =>
-                      handleAction(
-                        () => shipInvoice({ invoiceId: invoice.id }),
-                        "Marking goods as shipped...",
-                        "Unable to mark goods as shipped.",
-                      )
+                      requestConfirmation({
+                        label: "Mark Goods Shipped",
+                        invoiceId: invoice.id,
+                        fn: () =>
+                          handleAction(
+                            () => shipInvoice({ invoiceId: invoice.id }),
+                            "Marking goods as shipped...",
+                            "Unable to mark goods as shipped.",
+                          ),
+                      })
                     }
                   >
                     MARK GOODS SHIPPED
@@ -454,11 +461,16 @@ export default function InvoiceDetailClient({
                     className="w-full"
                     disabled={submitting}
                     onClick={() =>
-                      handleAction(
-                        () => confirmDelivery({ invoiceId: invoice.id }),
-                        "Confirming delivery...",
-                        "Unable to confirm delivery.",
-                      )
+                      requestConfirmation({
+                        label: "Confirm Delivery",
+                        invoiceId: invoice.id,
+                        fn: () =>
+                          handleAction(
+                            () => confirmDelivery({ invoiceId: invoice.id }),
+                            "Confirming delivery...",
+                            "Unable to confirm delivery.",
+                          ),
+                      })
                     }
                   >
                     CONFIRM DELIVERY
@@ -469,11 +481,16 @@ export default function InvoiceDetailClient({
                     className="w-full"
                     disabled={submitting}
                     onClick={() =>
-                      handleAction(
-                        () => repayInvoice({ invoiceId: invoice.id }),
-                        "Repaying invoice...",
-                        "Unable to repay invoice.",
-                      )
+                      requestConfirmation({
+                        label: "Repay Invoice",
+                        invoiceId: invoice.id,
+                        fn: () =>
+                          handleAction(
+                            () => repayInvoice({ invoiceId: invoice.id }),
+                            "Repaying invoice...",
+                            "Unable to repay invoice.",
+                          ),
+                      })
                     }
                   >
                     REPAY INVOICE
@@ -484,11 +501,16 @@ export default function InvoiceDetailClient({
                     className="w-full"
                     disabled={submitting}
                     onClick={() =>
-                      handleAction(
-                        () => defaultInvoice({ invoiceId: invoice.id }),
-                        "Defaulting invoice...",
-                        "Unable to default invoice.",
-                      )
+                      requestConfirmation({
+                        label: "Default Invoice",
+                        invoiceId: invoice.id,
+                        fn: () =>
+                          handleAction(
+                            () => defaultInvoice({ invoiceId: invoice.id }),
+                            "Defaulting invoice...",
+                            "Unable to default invoice.",
+                          ),
+                      })
                     }
                   >
                     DEFAULT INVOICE
