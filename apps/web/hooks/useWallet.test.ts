@@ -21,6 +21,10 @@ vi.mock("./useBalances", () => ({
   useBalances: vi.fn(),
 }));
 
+vi.mock("@stellar/freighter-api", () => ({
+  getNetworkDetails: vi.fn().mockResolvedValue({ network: "testnet" }),
+}));
+
 describe("useWallet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
