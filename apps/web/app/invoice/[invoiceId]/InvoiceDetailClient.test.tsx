@@ -30,6 +30,17 @@ vi.mock("@/store/wallet", () => ({
   useWalletStore: vi.fn(),
 }));
 
+// The confirmation dialog is rendered by the app shell, which is not present
+// in these isolated component tests. Mock the confirm store so that requesting
+// an action immediately invokes it (the same behavior as clicking CONFIRM).
+vi.mock("@/store/confirmDialog", () => ({
+  useConfirmDialogStore: vi.fn(() => ({
+    request: vi.fn((action: { fn: () => void }) => action.fn()),
+    cancel: vi.fn(),
+    pendingAction: null,
+  })),
+}));
+
 const ISSUER = "GACR43ILX6H4PGAOO5QKSZLU4ZJMGT3E66EAUDPLM5J6YTP4Y3PSHWGB";
 const BUYER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 const INVOICE_ID =
