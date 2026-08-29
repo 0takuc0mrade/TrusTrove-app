@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getNetworkDetails } from "@stellar/freighter-api";
 import { useWalletStore } from "@/store/wallet";
 import { connectFreighter, FreighterError } from "@/lib/freighter";
@@ -71,7 +71,11 @@ export function useWallet() {
    * address and defaults the network to `'testnet'`. The connection is rejected
    * if Freighter reports a different active network.
    */
+  const connectingRef = useRef(false);
+
   const connectWallet = async () => {
+    if (connectingRef.current) return;
+    connectingRef.current = true;
     setLoading(true);
     setError(null);
     setErrorCode(null);
@@ -96,6 +100,7 @@ export function useWallet() {
       disconnect();
     } finally {
       setLoading(false);
+      connectingRef.current = false;
     }
   };
 
